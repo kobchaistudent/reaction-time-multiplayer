@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -15,14 +14,12 @@
         
         #game-box { width: 100%; max-width: 500px; display: flex; flex-direction: column; align-items: center; gap: 15px; }
         #player-info { font-size: 1.1rem; color: #f39c12; background: #1a1a24; padding: 8px 16px; border-radius: 20px; display: flex; align-items: center; gap: 10px; }
-        
-        /* ปุ่มเปลี่ยนชื่อ / ออกจากเกม */
         .leave-btn { background: #333; color: #aaa; border: 1px solid #555; padding: 4px 10px; font-size: 0.85rem; border-radius: 12px; cursor: pointer; transition: 0.2s; }
         .leave-btn:hover { background: #e74c3c; color: white; border-color: #e74c3c; }
 
         #msg { font-size: 1.5rem; font-weight: 700; min-height: 2em; margin-top: 5px; }
         .buzz-btn { width: 100%; height: 48vh; font-size: 3rem; font-weight: 900; background: linear-gradient(145deg, #f39c12, #d35400); color: white; border: none; border-radius: 24px; cursor: pointer; touch-action: manipulation; }
-        .buzz-btn:disabled { background: #22222b; color: #555; cursor: not-allowed; }
+        .buzz-btn:disabled { background: #22222b; color: #555; cursor: not-allowed; border: 1px solid #333; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -41,7 +38,8 @@
             <button class="leave-btn" onclick="leaveGame()">✏️ เปลี่ยนชื่อ</button>
         </div>
         <h2 id="msg">รอ Host เริ่มไฟ...</h2>
-        <button id="btn" class="buzz-btn" onclick="press()">PRESS!</button>
+        <!-- ล็อกปุ่มกดตั้งแต่แรกด้วย disabled -->
+        <button id="btn" class="buzz-btn" onclick="press()" disabled>PRESS!</button>
     </div>
 
     <script>
@@ -64,11 +62,7 @@
                 document.getElementById('game-box').style.display = 'flex';
                 
                 playerRef = db.ref('players/' + myName);
-                
-                // บันทึกสถานะเข้าห้องเล่น
                 playerRef.set({ name: myName, status: 'WAITING', time: 0 });
-                
-                // เมื่อปิดเบราว์เซอร์หรือเน็ตหลุด ให้ลบชื่อออกจาก Firebase ทันที
                 playerRef.onDisconnect().remove();
 
                 listenState();
@@ -77,27 +71,24 @@
 
         function leaveGame() {
             if (playerRef) {
-                // ลบชื่อออกจาก Firebase ทันที
                 playerRef.remove();
                 playerRef.onDisconnect().cancel();
                 playerRef = null;
             }
 
-            // หยุดการดักฟังสถานะเกม
             if (gameStateListener) {
                 db.ref('gameState').off('value', gameStateListener);
             }
 
-            // รีเซ็ตสถานะหน้าจอเปิดกลับไปหน้ากรอกชื่อ
             hasPressed = false;
             clientGoTime = 0;
-            document.getElementById('btn').disabled = false;
+            document.getElementById('btn').disabled = true;
             document.getElementById('game-box').style.display = 'none';
             document.getElementById('join-box').style.display = 'block';
         }
 
         function press() {
-            if (hasPressed || !playerRef) return;
+            if (hasPressed || !playerRef || document.getElementById('btn').disabled) return;
             const pressTime = Date.now();
             hasPressed = true;
             document.getElementById('btn').disabled = true;
@@ -126,12 +117,14 @@
 
                 if (data.state === 'LIGHTS_ON' && !hasPressed) {
                     document.getElementById('msg').innerText = 'เตรียมพร้อม... (อย่าเพิ่งกด!)';
+                    document.getElementById('btn').disabled = false; // ปลดล็อกปุ่มให้กดวัดผล/ฟาวล์ได้เมื่อไฟเริ่มขึ้น
                 } else if (data.state === 'GO' && !hasPressed) {
                     document.getElementById('msg').innerText = '🔥 กดเลย! (GO!)';
+                    document.getElementById('btn').disabled = false;
                 } else if (data.state === 'WAITING') {
                     hasPressed = false;
                     clientGoTime = 0;
-                    document.getElementById('btn').disabled = false;
+                    document.getElementById('btn').disabled = true; // ล็อกปุ่มไว้เมื่อเกมยังไม่เริ่ม
                     document.getElementById('msg').innerText = 'รอ Host เริ่มไฟ...';
                     if (playerRef) {
                         playerRef.update({ status: 'WAITING', time: 0 });
