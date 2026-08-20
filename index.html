@@ -1,1 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>F1 Player Buzzer</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #0f0f13; color: white; font-family: sans-serif; text-align: center; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 16px; }
+        #join-box { background: #181820; border: 1px solid rgba(255,255,255,0.08); padding: 32px 24px; border-radius: 20px; width: 100%; max-width: 400px; }
+        #join-box h2 { font-size: 1.6rem; color: #f39c12; margin-bottom: 20px; }
+        #pname { width: 100%; background: #09090c; border: 2px solid #2a2a35; color: white; font-size: 1.1rem; padding: 14px; border-radius: 12px; text-align: center; outline: none; margin-bottom: 20px; }
+        .join-btn { width: 100%; font-size: 1.1rem; font-weight: 700; padding: 14px; background: linear-gradient(135deg, #f39c12, #e67e22); color: white; border: none; border-radius: 12px; cursor: pointer; }
+        #game-box { width: 100%; max-width: 500px; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+        #msg { font-size: 1.5rem; font-weight: 700; min-height: 2em; }
+        .buzz-btn { width: 100%; height: 50vh; font-size: 3rem; font-weight: 900; background: linear-gradient(145deg, #f39c12, #d35400); color: white; border: none; border-radius: 24px; cursor: pointer; touch-action: manipulation; }
+        .buzz-btn:disabled { background: #22222b; color: #555; cursor: not-allowed; }
+    </style>
+    <!-- โหลด Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+</head>
+<body>
 
+    <div id="join-box">
+        <h2>กรอกชื่อเพื่อเข้าเล่น</h2>
+        <input type="text" id="pname" placeholder="ใส่ชื่อของคุณที่นี่..." maxlength="15" autocomplete="off">
+        <button class="join-btn" onclick="join()">ตกลง</button>
+    </div>
+
+    <div id="game-box" style="display:none;">
+        <h2 id="msg">รอ Host เริ่มไฟ...</h2>
+        <button id="btn" class="buzz-btn" onclick="press()">PRESS!</button>
+    </div>
+
+    <script>
+        const FIREBASE_URL = "https://reaction-time-multiplayer-default-rtdb.asia-southeast1.firebasedatabase.app/";
+
+        firebase.initializeApp({ databaseURL: FIREBASE_URL });
+        const db = firebase.database();
+
+        let myName = '';
+        let hasPressed = false;
+        let clientGoTime = 0;
+
+        function join() {
+            myName = document.getElementById('pname').value.trim();
+            if (myName) {
+                document.getElementById('join-box').style.display = 'none';
+                document.getElementById('game-box').style.display = 'flex';
+                listenState();
+            }
+        }
+
+        function press() {
+            if (hasPressed) return;
+            const pressTime = Date.now();
+            hasPressed = true;
+            document.getElementById('btn').disabled = true;
+
+            let finalTime = (clientGoTime > 0) ? (pressTime - clientGoTime) : -1;
+
+            if (clientGoTime === 0 || finalTime <= 0) {
+                document.getElementById('msg').innerText = '❌ JUMP START (ฟาวล์!)';
+                db.ref('players/' + myName).set({ name: myName, status: 'JUMP_START', time: 0 });
+            } else {
+                document.getElementById('msg').innerText = `👍 เวลาของคุณ: ${finalTime} ms`;
+                db.ref('players/' + myName).set({ name: myName, status: 'OK', time: finalTime });
+            }
+        }
+
+        let lastState = '';
+        function listenState() {
+            db.ref('gameState').on('value', snapshot => {
+                const data = snapshot.val();
+                if (!data) return;
+
+                if (data.state === 'GO' && lastState !== 'GO') {
+                    clientGoTime = Date.now();
+                }
+                lastState = data.state;
+
+                if (data.state === 'LIGHTS_ON' && !hasPressed) {
+                    document.getElementById('msg').innerText = 'เตรียมพร้อม... (อย่าเพิ่งกด!)';
+                } else if (data.state === 'GO' && !hasPressed) {
+                    document.getElementById('msg').innerText = '🔥 กดเลย! (GO!)';
+                } else if (data.state === 'WAITING') {
+                    hasPressed = false;
+                    clientGoTime = 0;
+                    document.getElementById('btn').disabled = false;
+                    document.getElementById('msg').innerText = 'รอ Host เริ่มไฟ...';
+                }
+            });
+        }
+    </script>
+</body>
+</html>
