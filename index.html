@@ -18,7 +18,13 @@
         .leave-btn:hover { background: #e74c3c; color: white; border-color: #e74c3c; }
 
         #msg { font-size: 1.5rem; font-weight: 700; min-height: 2em; margin-top: 5px; }
-        .buzz-btn { width: 100%; height: 48vh; font-size: 3rem; font-weight: 900; background: linear-gradient(145deg, #f39c12, #d35400); color: white; border: none; border-radius: 24px; cursor: pointer; touch-action: manipulation; }
+        
+        /* สไตล์ปุ่มกด */
+        .buzz-btn { width: 100%; height: 48vh; font-size: 3rem; font-weight: 900; color: white; border: none; border-radius: 24px; cursor: pointer; touch-action: manipulation; transition: background 0.2s; }
+        
+        /* สีปุ่มในสถานะต่างๆ */
+        .buzz-btn.warning { background: linear-gradient(145deg, #e67e22, #d35400); } /* สีส้ม ช่วงไฟแดงเตรียมพร้อม */
+        .buzz-btn.active { background: linear-gradient(145deg, #2ecc71, #27ae60); } /* สีเขียวสด ช่วง GO */
         .buzz-btn:disabled { background: #22222b; color: #555; cursor: not-allowed; border: 1px solid #333; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
@@ -38,7 +44,7 @@
             <button class="leave-btn" onclick="leaveGame()">✏️ เปลี่ยนชื่อ</button>
         </div>
         <h2 id="msg">รอ Host เริ่มไฟ...</h2>
-        <!-- ล็อกปุ่มกดตั้งแต่แรกด้วย disabled -->
+        <!-- ปุ่มเริ่มต้นในสถานะ disabled -->
         <button id="btn" class="buzz-btn" onclick="press()" disabled>PRESS!</button>
     </div>
 
@@ -82,19 +88,25 @@
 
             hasPressed = false;
             clientGoTime = 0;
-            document.getElementById('btn').disabled = true;
+            const btn = document.getElementById('btn');
+            btn.disabled = true;
+            btn.className = 'buzz-btn';
             document.getElementById('game-box').style.display = 'none';
             document.getElementById('join-box').style.display = 'block';
         }
 
         function press() {
-            if (hasPressed || !playerRef || document.getElementById('btn').disabled) return;
+            const btn = document.getElementById('btn');
+            if (hasPressed || !playerRef || btn.disabled) return;
+            
             const pressTime = Date.now();
             hasPressed = true;
-            document.getElementById('btn').disabled = true;
+            btn.disabled = true; // กดแล้วล็อกปุ่มทันที
+            btn.className = 'buzz-btn';
 
             let finalTime = (clientGoTime > 0) ? (pressTime - clientGoTime) : -1;
 
+            // ถ้ากอดก่อนไฟเขียว (clientGoTime === 0) หรือเวลาฟาวล์
             if (clientGoTime === 0 || finalTime <= 0) {
                 document.getElementById('msg').innerText = '❌ JUMP START (ฟาวล์!)';
                 playerRef.update({ status: 'JUMP_START', time: 0 });
@@ -110,25 +122,33 @@
                 const data = snapshot.val();
                 if (!data) return;
 
+                const btn = document.getElementById('btn');
+
                 if (data.state === 'GO' && lastState !== 'GO') {
                     clientGoTime = Date.now();
                 }
                 lastState = data.state;
 
-                if (data.state === 'LIGHTS_ON' && !hasPressed) {
-                    document.getElementById('msg').innerText = 'เตรียมพร้อม... (อย่าเพิ่งกด!)';
-                    document.getElementById('btn').disabled = false; // ปลดล็อกปุ่มให้กดวัดผล/ฟาวล์ได้เมื่อไฟเริ่มขึ้น
-                } else if (data.state === 'GO' && !hasPressed) {
-                    document.getElementById('msg').innerText = '🔥 กดเลย! (GO!)';
-                    document.getElementById('btn').disabled = false;
-                } else if (data.state === 'WAITING') {
+                if (data.state === 'WAITING') {
+                    // 1. รอ Host เริ่มไฟ -> ล็อกปุ่มกดไม่ได้
                     hasPressed = false;
                     clientGoTime = 0;
-                    document.getElementById('btn').disabled = true; // ล็อกปุ่มไว้เมื่อเกมยังไม่เริ่ม
+                    btn.disabled = true;
+                    btn.className = 'buzz-btn';
                     document.getElementById('msg').innerText = 'รอ Host เริ่มไฟ...';
                     if (playerRef) {
                         playerRef.update({ status: 'WAITING', time: 0 });
                     }
+                } else if (data.state === 'LIGHTS_ON' && !hasPressed) {
+                    // 2. ช่วงไฟแดงติด 1-5 ดวง -> ปลดล็อกให้กดได้ แต่ถ้ากดจะถือว่า Jump Start!
+                    btn.disabled = false;
+                    btn.className = 'buzz-btn warning';
+                    document.getElementById('msg').innerText = 'เตรียมพร้อม... (อย่าเพิ่งกด!)';
+                } else if (data.state === 'GO' && !hasPressed) {
+                    // 3. ไฟดับ / ไฟเขียวขึ้น -> ปุ่มเป็นสีเขียว ปลดล็อกจับเวลาทันที
+                    btn.disabled = false;
+                    btn.className = 'buzz-btn active';
+                    document.getElementById('msg').innerText = '🔥 กดเลย! (GO!)';
                 }
             });
         }
