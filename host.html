@@ -1,1 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>F1 HOST SCREEN (Firebase Free 100%)</title>
+    <style>
+        body { background: #111; color: white; font-family: sans-serif; text-align: center; }
+        .board { display: flex; justify-content: center; gap: 12px; margin: 20px 0; }
+        .light-box { background: #222; padding: 12px; border-radius: 8px; border: 1px solid #333; }
+        .bulb { width: 45px; height: 45px; background: #333; border-radius: 50%; margin: 6px 0; }
+        .bulb.red { background: #ff0000; box-shadow: 0 0 18px #ff0000; }
+        .bulb.green { background: #00ff00; box-shadow: 0 0 18px #00ff00; }
+        button { font-size: 1.2rem; padding: 10px 20px; background: #ff1801; color: white; border: none; cursor: pointer; border-radius: 5px; margin: 5px; }
+        .container { display: flex; justify-content: center; margin-top: 20px; }
+        .panel { background: #1e1e1e; padding: 15px 25px; border-radius: 10px; width: 320px; text-align: left; }
+        ol { padding-left: 25px; font-size: 1.2rem; }
+    </style>
+    <!-- โหลด Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+</head>
+<body>
+    <h1>F1 HOST SCREEN</h1>
+    
+    <div class="board">
+        <div class="light-box"><div class="bulb green-bulb" id="g1"></div><div class="bulb red-bulb" id="r1"></div></div>
+        <div class="light-box"><div class="bulb green-bulb" id="g2"></div><div class="bulb red-bulb" id="r2"></div></div>
+        <div class="light-box"><div class="bulb green-bulb" id="g3"></div><div class="bulb red-bulb" id="r3"></div></div>
+        <div class="light-box"><div class="bulb green-bulb" id="g4"></div><div class="bulb red-bulb" id="r4"></div></div>
+        <div class="light-box"><div class="bulb green-bulb" id="g5"></div><div class="bulb red-bulb" id="r5"></div></div>
+    </div>
 
+    <button id="start-btn" onclick="startLights()">START LIGHTS</button>
+    <button onclick="resetGame()" style="background:#555;">RESET</button>
+
+    <div class="container">
+        <div class="panel">
+            <h3>Leaderboard</h3>
+            <ol id="leaderboard"></ol>
+        </div>
+    </div>
+
+    <script>
+        const FIREBASE_URL = "https://reaction-time-multiplayer-default-rtdb.asia-southeast1.firebasedatabase.app/";
+
+        firebase.initializeApp({ databaseURL: FIREBASE_URL });
+        const db = firebase.database();
+
+        let audioCtx = null;
+        function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        function playBeep(freq, duration) {
+            try {
+                initAudio();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e){}
+        }
+
+        let playedRed = [false, false, false, false, false];
+        let playedGreen = false;
+        let timerInterval = null;
+
+        function startLights() {
+            initAudio();
+            document.getElementById('start-btn').disabled = true;
+            playedRed = [false, false, false, false, false];
+            playedGreen = false;
+
+            const now = Date.now();
+            const randomDelay = Math.floor(Math.random() * 2000) + 1500;
+            const goTime = now + 5000 + randomDelay;
+
+            db.ref('players').remove();
+            db.ref('gameState').set({
+                state: 'LIGHTS_ON',
+                lightsStartTime: now,
+                goTime: goTime
+            });
+
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                const current = Date.now();
+                if (current >= goTime) {
+                    db.ref('gameState/state').set('GO');
+                    clearInterval(timerInterval);
+                }
+            }, 50);
+        }
+
+        function resetGame() {
+            if (timerInterval) clearInterval(timerInterval);
+            db.ref('gameState').set({ state: 'WAITING', lightsStartTime: 0, goTime: 0 });
+            db.ref('players').remove();
+            document.getElementById('start-btn').disabled = false;
+        }
+
+        db.ref('gameState').on('value', snapshot => {
+            const data = snapshot.val();
+            if (!data) return;
+
+            const now = Date.now();
+            for(let i=1; i<=5; i++) {
+                const redBulb = document.getElementById('r' + i);
+                const greenBulb = document.getElementById('g' + i);
+                redBulb.classList.remove('red');
+                greenBulb.classList.remove('green');
+
+                if (data.state === 'LIGHTS_ON') {
+                    if (now >= data.lightsStartTime + (i * 1000)) {
+                        redBulb.classList.add('red');
+                        if (!playedRed[i - 1]) { playBeep(440, 0.15); playedRed[i - 1] = true; }
+                    }
+                } else if (data.state === 'GO') {
+                    greenBulb.classList.add('green');
+                    if (!playedGreen) { playBeep(880, 0.4); playedGreen = true; }
+                }
+            }
+        });
+
+        db.ref('players').on('value', snapshot => {
+            const board = document.getElementById('leaderboard');
+            board.innerHTML = '';
+            const playersData = snapshot.val();
+            if (!playersData) return;
+
+            let players = Object.values(playersData);
+            players.sort((a,b) => {
+                let timeA = (a.status === 'OK') ? a.time : 999999;
+                let timeB = (b.status === 'OK') ? b.time : 999999;
+                return timeA - timeB;
+            });
+
+            players.forEach(p => {
+                let text = p.status === 'JUMP_START' ? '❌ JUMP START' : `⚡ ${p.time} ms`;
+                board.innerHTML += `<li><b>${p.name}</b>: ${text}</li>`;
+            });
+        });
+    </script>
+</body>
+</html>
