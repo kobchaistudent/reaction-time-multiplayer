@@ -31,7 +31,6 @@
 
     <h1>🏎️ F1 Host Controller</h1>
 
-    <!-- เพิ่มส่วนเลือกหน้าจอ Screen -->
     <div class="card">
         <h3>📺 โหมดหน้าจอใหญ่ (Screen View)</h3>
         <div class="selector-group">
@@ -73,7 +72,11 @@
         const db = firebase.database();
 
         let currentMode = 'AUTO';
-        let autoTimer = null;
+        let serverOffset = 0;
+
+        db.ref('.info/serverTimeOffset').on('value', snap => {
+            serverOffset = snap.val() || 0;
+        });
 
         function setScreenView(viewMode) {
             document.getElementById('view-lights').className = 'select-btn ' + (viewMode === 'LIGHTS' ? 'screen-active' : '');
@@ -90,46 +93,46 @@
 
         function startSequence() {
             resetGame();
-            // เมื่อสั่งเริ่มไฟ สลับหน้าจอใหญ่กลับเป็นหน้าไฟให้อัตโนมัติ
             setScreenView('LIGHTS');
-            db.ref('gameState/state').set('LIGHTS_ON');
-            db.ref('gameState/lights').set(1);
+            
+            const now = Date.now() + serverOffset;
+            const sequenceStartTime = now + 500; // ให้เวลาเครื่องอื่นรับตารางเวลา่วงหน้า 0.5 วินาที
+            let targetGoTime = 0;
 
-            let lightCount = 1;
-            let interval = setInterval(() => {
-                lightCount++;
-                if (lightCount <= 5) {
-                    db.ref('gameState/lights').set(lightCount);
-                } else {
-                    clearInterval(interval);
-                    if (currentMode === 'AUTO') {
-                        let randomDelay = Math.floor(Math.random() * 2000) + 1000;
-                        autoTimer = setTimeout(() => {
-                            db.ref('gameState/state').set('GO');
-                            db.ref('gameState/lights').set(0);
-                            db.ref('gameState/goTime').set(Date.now());
-                        }, randomDelay);
-                    } else {
-                        document.getElementById('manual-go-btn').disabled = false;
-                    }
-                }
-            }, 1000);
+            if (currentMode === 'AUTO') {
+                const randomDelay = Math.floor(Math.random() * 2000) + 1000;
+                targetGoTime = sequenceStartTime + 5000 + randomDelay; // ไฟแดง 5 ดวง (5 วินาที) + เวลาสุ่ม
+            }
+
+            db.ref('gameState').set({
+                state: 'STARTING',
+                startTime: sequenceStartTime,
+                goTime: targetGoTime,
+                mode: currentMode,
+                screenView: 'LIGHTS'
+            });
+
+            if (currentMode === 'MANUAL') {
+                setTimeout(() => {
+                    document.getElementById('manual-go-btn').disabled = false;
+                }, 5500);
+            }
         }
 
         function triggerManualGo() {
             document.getElementById('manual-go-btn').disabled = true;
-            db.ref('gameState/state').set('GO');
-            db.ref('gameState/lights').set(0);
-            db.ref('gameState/goTime').set(Date.now());
+            const now = Date.now() + serverOffset;
+            db.ref('gameState').update({
+                state: 'MANUAL_GO',
+                goTime: now
+            });
         }
 
         function resetGame() {
-            if (autoTimer) clearTimeout(autoTimer);
             document.getElementById('manual-go-btn').style.display = (currentMode === 'MANUAL') ? 'block' : 'none';
             document.getElementById('manual-go-btn').disabled = true;
             
-            db.ref('gameState/state').set('WAITING');
-            db.ref('gameState/lights').set(0);
+            db.ref('gameState').set({ state: 'WAITING', mode: currentMode, screenView: 'LIGHTS' });
             
             db.ref('players').once('value', snapshot => {
                 const players = snapshot.val();
