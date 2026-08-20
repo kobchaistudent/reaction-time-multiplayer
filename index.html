@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -20,7 +20,7 @@
         
         .buzz-btn { width: 100%; height: 48vh; font-size: 3rem; font-weight: 900; color: white; border: none; border-radius: 24px; cursor: pointer; touch-action: manipulation; }
         .buzz-btn.warning { background: linear-gradient(145deg, #e67e22, #d35400); }
-        .buzz-btn.active { background: linear-gradient(145deg, #3498db, #2980b9); } /* ปุ่มสีฟ้าตอนไฟดับกดได้ */
+        .buzz-btn.active { background: linear-gradient(145deg, #3498db, #2980b9); }
         .buzz-btn:disabled { background: #22222b; color: #555; cursor: not-allowed; border: 1px solid #333; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
@@ -50,7 +50,8 @@
 
         let myName = '';
         let hasPressed = false;
-        let clientGoTime = 0;
+        let localGoTime = 0; // ตัวแปรเก็บเวลา ณ ตอนไฟดับในเครื่องผู้เล่น
+        let isGoState = false; // บอกว่าไฟดับ (GO) แล้วหรือยัง
         let playerRef = null;
 
         function join() {
@@ -76,7 +77,8 @@
                 playerRef = null;
             }
             hasPressed = false;
-            clientGoTime = 0;
+            localGoTime = 0;
+            isGoState = false;
             document.getElementById('game-box').style.display = 'none';
             document.getElementById('join-box').style.display = 'block';
         }
@@ -108,17 +110,17 @@
             const btn = document.getElementById('btn');
             if (hasPressed || !playerRef || btn.disabled) return;
             
-            const pressTime = Date.now();
+            const pressTime = performance.now(); // ใช้ performance.now() เพื่อความละเอียดระดับมิลลิวินาที
             hasPressed = true;
             btn.disabled = true;
             btn.className = 'buzz-btn';
 
-            let finalTime = (clientGoTime > 0) ? (pressTime - clientGoTime) : -1;
-
-            if (clientGoTime === 0 || finalTime <= 0) {
+            // ถ้ากดก่อนไฟดับ (ยังไม่เข้าสู่ GO state) หรือเวลาติดลบ -> ฟาวล์!
+            if (!isGoState || localGoTime === 0) {
                 document.getElementById('msg').innerText = '❌ JUMP START (ฟาวล์!)';
                 playerRef.update({ status: 'JUMP_START', time: 0 });
             } else {
+                let finalTime = Math.round(pressTime - localGoTime);
                 document.getElementById('msg').innerText = `👍 เวลาของคุณ: ${finalTime} ms`;
                 playerRef.update({ status: 'OK', time: finalTime });
             }
@@ -132,18 +134,22 @@
 
                 const btn = document.getElementById('btn');
 
+                // ตรวจจับจังหวะเปลี่ยนเป็น GO ทันทีเพื่อบันทึกเวลาภายในเครื่องผู้เล่น
                 if (data.state === 'GO' && lastState !== 'GO') {
-                    clientGoTime = data.goTime || Date.now();
+                    localGoTime = performance.now(); // บันทึกเวลาฝั่งผู้เล่น ณ มิลลิวินาทีที่ได้รับสัญญาณ
+                    isGoState = true;
                 }
                 lastState = data.state;
 
                 if (data.state === 'WAITING') {
                     hasPressed = false;
-                    clientGoTime = 0;
+                    localGoTime = 0;
+                    isGoState = false;
                     btn.disabled = true;
                     btn.className = 'buzz-btn';
                     document.getElementById('msg').innerText = 'รอ Host เริ่มไฟ...';
                 } else if (data.state === 'LIGHTS_ON' && !hasPressed) {
+                    isGoState = false;
                     btn.disabled = false;
                     btn.className = 'buzz-btn warning';
                     document.getElementById('msg').innerText = 'เตรียมพร้อม... (อย่าเพิ่งกด!)';
