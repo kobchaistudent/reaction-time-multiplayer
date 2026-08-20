@@ -11,8 +11,8 @@
         .light-column { display: flex; flex-direction: column; gap: 15px; background: #000; padding: 15px; border-radius: 12px; }
         .light { width: 80px; height: 80px; border-radius: 50%; background: #222; box-shadow: inset 0 0 10px rgba(0,0,0,0.8); }
         
+        /* สไตล์ไฟแดง */
         .light.red { background: #ff0000; box-shadow: 0 0 40px #ff0000, inset 0 0 10px #fff; }
-        .light.green { background: #00ff22; box-shadow: 0 0 50px #00ff22, inset 0 0 10px #fff; }
 
         #status-text { margin-top: 40px; font-size: 3rem; font-weight: bold; letter-spacing: 2px; }
     </style>
@@ -36,7 +36,6 @@
         firebase.initializeApp({ databaseURL: FIREBASE_URL });
         const db = firebase.database();
 
-        // สร้าง AudioContext สำหรับเล่นเสียงบี๊บในเบราว์เซอร์
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
         function playBeep(freq = 440, type = 'sine', duration = 0.15) {
@@ -80,15 +79,16 @@
                 });
 
                 if (data.lights > lastLights) {
-                    playBeep(520, 'square', 0.15); // เสียงบี๊บไฟแดงแต่ละดวง
+                    playBeep(440, 'square', 0.15); // เสียงบี๊บไฟแดงติด
                 }
             } else if (data.state === 'GO') {
-                lights.forEach(l => l.className = 'light green');
+                // ไฟดับทั้งหมดเมื่อ GO
+                lights.forEach(l => l.className = 'light');
                 statusText.innerText = 'LIGHTS OUT! GO GO GO!';
-                statusText.style.color = '#00ff22';
+                statusText.style.color = '#2ecc71';
 
                 if (lastState !== 'GO') {
-                    playBeep(1000, 'sine', 0.4); // เสียงบี๊บไฟเขียว
+                    playBeep(880, 'sine', 0.3); // เสียงสัญญาณไฟดับออกตัว
                 }
             }
 
