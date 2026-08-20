@@ -50,14 +50,12 @@
 
         let myName = '';
         let hasPressed = false;
-        let serverGoTime = 0; // เวลาประทับที่ไฟดับอ้างอิง Server
-        let serverOffset = 0; // ค่าความต่างเวลาระหว่างเครื่องเรากับ Server
-        let isGoState = false;
+        let serverOffset = 0;
+        let currentGameState = null;
         let playerRef = null;
 
-        // คำนวณค่าความต่างเวลา (Time Offset) กับ Server ตลอดเวลา
-        db.ref('.info/serverTimeOffset').on('value', snapshot => {
-            serverOffset = snapshot.val() || 0;
+        db.ref('.info/serverTimeOffset').on('value', snap => {
+            serverOffset = snap.val() || 0;
         });
 
         function join() {
@@ -83,26 +81,16 @@
                 playerRef = null;
             }
             hasPressed = false;
-            serverGoTime = 0;
-            isGoState = false;
             document.getElementById('game-box').style.display = 'none';
             document.getElementById('join-box').style.display = 'block';
         }
 
         function listenPlayerRemoval() {
             playerRef.on('value', snapshot => {
-                if (!snapshot.exists()) {
-                    db.ref('players').once('value', allSnap => {
-                        let foundNewName = false;
-                        allSnap.forEach(child => {
-                            if (child.val().time === 0 && child.key !== myName) {}
-                        });
-                        if (!foundNewName && document.getElementById('game-box').style.display !== 'none') {
-                            alert("คุณถูก Host เชิญออกจากห้อง หรือข้อมูลชื่อถูกแก้ไข");
-                            leaveGame();
-                        }
-                    });
-                } else {
+                if (!snapshot.exists() && document.getElementById('game-box').style.display !== 'none') {
+                    alert("คุณถูก Host เชิญออกจากห้อง หรือข้อมูลชื่อถูกแก้ไข");
+                    leaveGame();
+                } else if (snapshot.exists()) {
                     const data = snapshot.val();
                     if (data.name !== myName) {
                         myName = data.name;
@@ -114,58 +102,43 @@
 
         function press() {
             const btn = document.getElementById('btn');
-            if (hasPressed || !playerRef || btn.disabled) return;
+            if (hasPressed || !playerRef || btn.disabled || !currentGameState) return;
             
-            // คำนวณเวลาฝั่งผู้เล่นโดยปรับชดเชยกับ Server
-            const currentServerTime = Date.now() + serverOffset; 
+            const pressTime = Date.now() + serverOffset;
             hasPressed = true;
             btn.disabled = true;
             btn.className = 'buzz-btn';
 
-            let finalTime = currentServerTime - serverGoTime;
+            let targetGoTime = currentGameState.goTime;
+            let reactionTime = pressTime - targetGoTime;
 
-            // ถ้ากดก่อนที่ Server จะปล่อยไฟดับ หรือเวลาที่คำนวณได้ติดลบ -> ฟาวล์!
-            if (!isGoState || serverGoTime === 0 || finalTime <= 0) {
+            // ถ้ากดก่อนไฟดับ (โหมด AUTO) หรือกดก่อน Host ดับไฟ (โหมด MANUAL)
+            if (currentGameState.state === 'WAITING' || (currentGameState.mode === 'AUTO' && reactionTime <= 0) || (currentGameState.mode === 'MANUAL' && currentGameState.state !== 'MANUAL_GO')) {
                 document.getElementById('msg').innerText = '❌ JUMP START (ฟาวล์!)';
                 playerRef.update({ status: 'JUMP_START', time: 0 });
             } else {
-                document.getElementById('msg').innerText = `👍 เวลาของคุณ: ${finalTime} ms`;
-                playerRef.update({ status: 'OK', time: finalTime });
+                document.getElementById('msg').innerText = `👍 เวลาของคุณ: ${reactionTime} ms`;
+                playerRef.update({ status: 'OK', time: reactionTime });
             }
         }
 
-        let lastState = '';
         function listenState() {
             db.ref('gameState').on('value', snapshot => {
                 const data = snapshot.val();
                 if (!data) return;
 
+                currentGameState = data;
                 const btn = document.getElementById('btn');
-
-                if (data.state === 'GO') {
-                    isGoState = true;
-                    if (data.goTime) {
-                        serverGoTime = data.goTime; // ใช้เวลาประทับตรงจาก Host/Server
-                    }
-                }
-                lastState = data.state;
 
                 if (data.state === 'WAITING') {
                     hasPressed = false;
-                    serverGoTime = 0;
-                    isGoState = false;
                     btn.disabled = true;
                     btn.className = 'buzz-btn';
                     document.getElementById('msg').innerText = 'รอ Host เริ่มไฟ...';
-                } else if (data.state === 'LIGHTS_ON' && !hasPressed) {
-                    isGoState = false;
+                } else if (!hasPressed) {
                     btn.disabled = false;
                     btn.className = 'buzz-btn warning';
-                    document.getElementById('msg').innerText = 'เตรียมพร้อม... (อย่าเพิ่งกด!)';
-                } else if (data.state === 'GO' && !hasPressed) {
-                    btn.disabled = false;
-                    btn.className = 'buzz-btn active';
-                    document.getElementById('msg').innerText = '🔥 ไฟดับแล้ว! กดเลย! (GO!)';
+                    document.getElementById('msg').innerText = 'เตรียมพร้อม... (กดเมื่อไฟดับ!)';
                 }
             });
         }
