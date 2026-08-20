@@ -7,7 +7,6 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: #050508; color: white; font-family: sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 100vh; overflow: hidden; padding: 20px; }
         
-        /* สไตล์หน้าสัญญาณไฟ */
         #lights-view { display: flex; flex-direction: column; align-items: center; }
         .light-board { display: flex; gap: 20px; background: #111; padding: 30px 40px; border-radius: 20px; border: 4px solid #222; box-shadow: 0 0 50px rgba(0,0,0,0.8); }
         .light-column { display: flex; flex-direction: column; gap: 15px; background: #000; padding: 15px; border-radius: 12px; }
@@ -15,17 +14,16 @@
         .light.red { background: #ff0000; box-shadow: 0 0 40px #ff0000, inset 0 0 10px #fff; }
         #status-text { margin-top: 40px; font-size: 3rem; font-weight: bold; letter-spacing: 2px; }
 
-        /* สไตล์หน้า LEADERBOARD */
         #board-view { width: 100%; max-width: 900px; display: none; flex-direction: column; align-items: center; }
         .board-title { font-size: 3rem; color: #f39c12; margin-bottom: 25px; text-transform: uppercase; letter-spacing: 2px; font-weight: 900; }
         .leaderboard-table { width: 100%; border-collapse: separate; border-spacing: 0 10px; }
         .leaderboard-table th { font-size: 1.2rem; color: #888; text-align: left; padding: 10px 20px; }
-        .leaderboard-row { background: #12121a; border-radius: 12px; transition: transform 0.2s; }
+        .leaderboard-row { background: #12121a; border-radius: 12px; }
         .leaderboard-row td { padding: 18px 20px; font-size: 1.5rem; font-weight: bold; }
-        .leaderboard-row:nth-child(1) { background: linear-gradient(90deg, #f1c40f, #d4ac0d); color: black; } /* อันดับ 1 สีทอง */
-        .leaderboard-row:nth-child(2) { background: linear-gradient(90deg, #bdc3c7, #95a5a6); color: black; } /* อันดับ 2 สีเงิน */
-        .leaderboard-row:nth-child(3) { background: linear-gradient(90deg, #e67e22, #d35400); color: white; } /* อันดับ 3 สีทองแดง */
-        .leaderboard-row.foul { background: #221215; color: #e74c3c; border: 1px solid #5c1d24; } /* ฟาวล์/ยังไม่กด */
+        .leaderboard-row:nth-child(1) { background: linear-gradient(90deg, #f1c40f, #d4ac0d); color: black; }
+        .leaderboard-row:nth-child(2) { background: linear-gradient(90deg, #bdc3c7, #95a5a6); color: black; }
+        .leaderboard-row:nth-child(3) { background: linear-gradient(90deg, #e67e22, #d35400); color: white; }
+        .leaderboard-row.foul { background: #221215; color: #e74c3c; border: 1px solid #5c1d24; }
         .rank { width: 80px; font-size: 1.8rem; font-weight: 900; }
         .time-col { text-align: right; font-family: monospace; font-size: 1.8rem; }
     </style>
@@ -34,7 +32,6 @@
 </head>
 <body>
 
-    <!-- 1. หน้าไฟ F1 -->
     <div id="lights-view">
         <div class="light-board">
             <div class="light-column"><div class="light" id="l1"></div></div>
@@ -46,14 +43,13 @@
         <div id="status-text">WAITING...</div>
     </div>
 
-    <!-- 2. หน้า LEADERBOARD -->
     <div id="board-view">
         <h1 class="board-title">🏆 LEADERBOARD</h1>
         <table class="leaderboard-table">
             <thead>
                 <tr>
                     <th style="width: 10%;">POS</th>
-                    <th style="width: 50%;">NAME</th>
+                    <th style="width: 50%;">DRIVER</th>
                     <th style="width: 40%; text-align: right;">REACTION TIME</th>
                 </tr>
             </thead>
@@ -67,6 +63,12 @@
         const db = firebase.database();
 
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let serverOffset = 0;
+        let animFrame = null;
+
+        db.ref('.info/serverTimeOffset').on('value', snap => {
+            serverOffset = snap.val() || 0;
+        });
 
         function playBeep(freq = 440, type = 'sine', duration = 0.15) {
             if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -82,63 +84,81 @@
             osc.stop(audioCtx.currentTime + duration);
         }
 
-        let lastLights = 0;
-        let lastState = '';
-
-        // สลับมุมมองหน้าจอ
         db.ref('gameState/screenView').on('value', snapshot => {
             const viewMode = snapshot.val() || 'LIGHTS';
-            if (viewMode === 'LEADERBOARD') {
-                document.getElementById('lights-view').style.display = 'none';
-                document.getElementById('board-view').style.display = 'flex';
-            } else {
-                document.getElementById('lights-view').style.display = 'flex';
-                document.getElementById('board-view').style.display = 'none';
-            }
+            document.getElementById('lights-view').style.display = (viewMode === 'LEADERBOARD') ? 'none' : 'flex';
+            document.getElementById('board-view').style.display = (viewMode === 'LEADERBOARD') ? 'flex' : 'none';
         });
 
-        // ควบคุมไฟ F1 และ เสียง
+        let currentLights = 0;
+        let isGoPlayed = false;
+
         db.ref('gameState').on('value', snapshot => {
             const data = snapshot.val();
             if (!data) return;
+
+            if (animFrame) cancelAnimationFrame(animFrame);
 
             const lights = [document.getElementById('l1'), document.getElementById('l2'), document.getElementById('l3'), document.getElementById('l4'), document.getElementById('l5')];
             const statusText = document.getElementById('status-text');
 
             if (data.state === 'WAITING') {
+                currentLights = 0;
+                isGoPlayed = false;
                 lights.forEach(l => l.className = 'light');
                 statusText.innerText = 'WAITING FOR HOST...';
                 statusText.style.color = 'white';
-            } else if (data.state === 'LIGHTS_ON') {
-                statusText.innerText = 'READY...';
-                statusText.style.color = '#f39c12';
-                
-                lights.forEach((l, idx) => {
-                    if (idx < data.lights) {
-                        l.className = 'light red';
-                    } else {
-                        l.className = 'light';
+            } else {
+                function updateDisplay() {
+                    const now = Date.now() + serverOffset;
+
+                    if (data.state === 'STARTING') {
+                        const elapsed = now - data.startTime;
+
+                        if (elapsed < 0) {
+                            lights.forEach(l => l.className = 'light');
+                            statusText.innerText = 'READY...';
+                        } else if (data.mode === 'AUTO' && data.goTime > 0 && now >= data.goTime) {
+                            // ดับไฟ
+                            lights.forEach(l => l.className = 'light');
+                            statusText.innerText = 'LIGHTS OUT! GO GO GO!';
+                            statusText.style.color = '#2ecc71';
+                            if (!isGoPlayed) {
+                                playBeep(880, 'sine', 0.3);
+                                isGoPlayed = true;
+                            }
+                        } else {
+                            // สภาพเปิดไฟทีละดวง (1-5)
+                            let activeCount = Math.min(5, Math.floor(elapsed / 1000) + 1);
+                            if (activeCount < 1) activeCount = 1;
+
+                            lights.forEach((l, idx) => {
+                                l.className = idx < activeCount ? 'light red' : 'light';
+                            });
+
+                            if (activeCount > currentLights && activeCount <= 5) {
+                                playBeep(440, 'square', 0.15);
+                                currentLights = activeCount;
+                            }
+                            statusText.innerText = 'READY...';
+                            statusText.style.color = '#f39c12';
+                        }
+                    } else if (data.state === 'MANUAL_GO') {
+                        lights.forEach(l => l.className = 'light');
+                        statusText.innerText = 'LIGHTS OUT! GO GO GO!';
+                        statusText.style.color = '#2ecc71';
+                        if (!isGoPlayed) {
+                            playBeep(880, 'sine', 0.3);
+                            isGoPlayed = true;
+                        }
                     }
-                });
 
-                if (data.lights > lastLights) {
-                    playBeep(440, 'square', 0.15);
+                    animFrame = requestAnimationFrame(updateDisplay);
                 }
-            } else if (data.state === 'GO') {
-                lights.forEach(l => l.className = 'light');
-                statusText.innerText = 'LIGHTS OUT! GO GO GO!';
-                statusText.style.color = '#2ecc71';
-
-                if (lastState !== 'GO') {
-                    playBeep(880, 'sine', 0.3);
-                }
+                updateDisplay();
             }
-
-            lastLights = data.lights || 0;
-            lastState = data.state;
         });
 
-        // อัปเดตตาราง Leaderboard อัตโนมัติ
         db.ref('players').on('value', snapshot => {
             const tbody = document.getElementById('board-list');
             tbody.innerHTML = '';
@@ -149,11 +169,8 @@
                 list.push(players[key]);
             }
 
-            // จัดลำดับ: เวลาดีสุด (น้อยสุด) ไว้บนสุด -> Jump Start / ยังไม่กด ไว้ล่างสุด
             list.sort((a, b) => {
-                if (a.status === 'OK' && b.status === 'OK') {
-                    return a.time - b.time; // เวลาน้อยสุดขึ้นก่อน
-                }
+                if (a.status === 'OK' && b.status === 'OK') return a.time - b.time;
                 if (a.status === 'OK') return -1;
                 if (b.status === 'OK') return 1;
                 return 0;
@@ -165,13 +182,9 @@
                 tr.className = `leaderboard-row ${isFoul ? 'foul' : ''}`;
 
                 let timeDisplay = '-';
-                if (p.status === 'OK') {
-                    timeDisplay = `${p.time} ms`;
-                } else if (p.status === 'JUMP_START') {
-                    timeDisplay = '❌ JUMP START';
-                } else {
-                    timeDisplay = 'WAITING...';
-                }
+                if (p.status === 'OK') timeDisplay = `${p.time} ms`;
+                else if (p.status === 'JUMP_START') timeDisplay = '❌ JUMP START';
+                else timeDisplay = 'WAITING...';
 
                 tr.innerHTML = `
                     <td class="rank">${isFoul ? '-' : (index + 1)}</td>
