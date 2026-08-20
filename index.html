@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -12,9 +11,16 @@
         #join-box h2 { font-size: 1.6rem; color: #f39c12; margin-bottom: 20px; }
         #pname { width: 100%; background: #09090c; border: 2px solid #2a2a35; color: white; font-size: 1.1rem; padding: 14px; border-radius: 12px; text-align: center; outline: none; margin-bottom: 20px; }
         .join-btn { width: 100%; font-size: 1.1rem; font-weight: 700; padding: 14px; background: linear-gradient(135deg, #f39c12, #e67e22); color: white; border: none; border-radius: 12px; cursor: pointer; }
-        #game-box { width: 100%; max-width: 500px; display: flex; flex-direction: column; align-items: center; gap: 20px; }
-        #msg { font-size: 1.5rem; font-weight: 700; min-height: 2em; }
-        .buzz-btn { width: 100%; height: 50vh; font-size: 3rem; font-weight: 900; background: linear-gradient(145deg, #f39c12, #d35400); color: white; border: none; border-radius: 24px; cursor: pointer; touch-action: manipulation; }
+        
+        #game-box { width: 100%; max-width: 500px; display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        #player-info { font-size: 1.1rem; color: #f39c12; background: #1a1a24; padding: 8px 16px; border-radius: 20px; display: flex; align-items: center; gap: 10px; }
+        
+        /* ปุ่มเปลี่ยนชื่อ / ออกจากเกม */
+        .leave-btn { background: #333; color: #aaa; border: 1px solid #555; padding: 4px 10px; font-size: 0.85rem; border-radius: 12px; cursor: pointer; transition: 0.2s; }
+        .leave-btn:hover { background: #e74c3c; color: white; border-color: #e74c3c; }
+
+        #msg { font-size: 1.5rem; font-weight: 700; min-height: 2em; margin-top: 5px; }
+        .buzz-btn { width: 100%; height: 48vh; font-size: 3rem; font-weight: 900; background: linear-gradient(145deg, #f39c12, #d35400); color: white; border: none; border-radius: 24px; cursor: pointer; touch-action: manipulation; }
         .buzz-btn:disabled { background: #22222b; color: #555; cursor: not-allowed; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
@@ -29,6 +35,10 @@
     </div>
 
     <div id="game-box" style="display:none;">
+        <div id="player-info">
+            👤 ผู้เล่น: <strong id="display-name"></strong>
+            <button class="leave-btn" onclick="leaveGame()">✏️ เปลี่ยนชื่อ</button>
+        </div>
         <h2 id="msg">รอ Host เริ่มไฟ...</h2>
         <button id="btn" class="buzz-btn" onclick="press()">PRESS!</button>
     </div>
@@ -43,10 +53,12 @@
         let hasPressed = false;
         let clientGoTime = 0;
         let playerRef = null;
+        let gameStateListener = null;
 
         function join() {
             myName = document.getElementById('pname').value.trim();
             if (myName) {
+                document.getElementById('display-name').innerText = myName;
                 document.getElementById('join-box').style.display = 'none';
                 document.getElementById('game-box').style.display = 'flex';
                 
@@ -60,6 +72,27 @@
 
                 listenState();
             }
+        }
+
+        function leaveGame() {
+            if (playerRef) {
+                // ลบชื่อออกจาก Firebase ทันที
+                playerRef.remove();
+                playerRef.onDisconnect().cancel();
+                playerRef = null;
+            }
+
+            // หยุดการดักฟังสถานะเกม
+            if (gameStateListener) {
+                db.ref('gameState').off('value', gameStateListener);
+            }
+
+            // รีเซ็ตสถานะหน้าจอเปิดกลับไปหน้ากรอกชื่อ
+            hasPressed = false;
+            clientGoTime = 0;
+            document.getElementById('btn').disabled = false;
+            document.getElementById('game-box').style.display = 'none';
+            document.getElementById('join-box').style.display = 'block';
         }
 
         function press() {
@@ -81,7 +114,7 @@
 
         let lastState = '';
         function listenState() {
-            db.ref('gameState').on('value', snapshot => {
+            gameStateListener = db.ref('gameState').on('value', snapshot => {
                 const data = snapshot.val();
                 if (!data) return;
 
