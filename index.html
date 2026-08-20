@@ -50,9 +50,15 @@
 
         let myName = '';
         let hasPressed = false;
-        let localGoTime = 0; // ตัวแปรเก็บเวลา ณ ตอนไฟดับในเครื่องผู้เล่น
-        let isGoState = false; // บอกว่าไฟดับ (GO) แล้วหรือยัง
+        let serverGoTime = 0; // เวลาประทับที่ไฟดับอ้างอิง Server
+        let serverOffset = 0; // ค่าความต่างเวลาระหว่างเครื่องเรากับ Server
+        let isGoState = false;
         let playerRef = null;
+
+        // คำนวณค่าความต่างเวลา (Time Offset) กับ Server ตลอดเวลา
+        db.ref('.info/serverTimeOffset').on('value', snapshot => {
+            serverOffset = snapshot.val() || 0;
+        });
 
         function join() {
             myName = document.getElementById('pname').value.trim();
@@ -77,7 +83,7 @@
                 playerRef = null;
             }
             hasPressed = false;
-            localGoTime = 0;
+            serverGoTime = 0;
             isGoState = false;
             document.getElementById('game-box').style.display = 'none';
             document.getElementById('join-box').style.display = 'block';
@@ -110,17 +116,19 @@
             const btn = document.getElementById('btn');
             if (hasPressed || !playerRef || btn.disabled) return;
             
-            const pressTime = performance.now(); // ใช้ performance.now() เพื่อความละเอียดระดับมิลลิวินาที
+            // คำนวณเวลาฝั่งผู้เล่นโดยปรับชดเชยกับ Server
+            const currentServerTime = Date.now() + serverOffset; 
             hasPressed = true;
             btn.disabled = true;
             btn.className = 'buzz-btn';
 
-            // ถ้ากดก่อนไฟดับ (ยังไม่เข้าสู่ GO state) หรือเวลาติดลบ -> ฟาวล์!
-            if (!isGoState || localGoTime === 0) {
+            let finalTime = currentServerTime - serverGoTime;
+
+            // ถ้ากดก่อนที่ Server จะปล่อยไฟดับ หรือเวลาที่คำนวณได้ติดลบ -> ฟาวล์!
+            if (!isGoState || serverGoTime === 0 || finalTime <= 0) {
                 document.getElementById('msg').innerText = '❌ JUMP START (ฟาวล์!)';
                 playerRef.update({ status: 'JUMP_START', time: 0 });
             } else {
-                let finalTime = Math.round(pressTime - localGoTime);
                 document.getElementById('msg').innerText = `👍 เวลาของคุณ: ${finalTime} ms`;
                 playerRef.update({ status: 'OK', time: finalTime });
             }
@@ -134,16 +142,17 @@
 
                 const btn = document.getElementById('btn');
 
-                // ตรวจจับจังหวะเปลี่ยนเป็น GO ทันทีเพื่อบันทึกเวลาภายในเครื่องผู้เล่น
-                if (data.state === 'GO' && lastState !== 'GO') {
-                    localGoTime = performance.now(); // บันทึกเวลาฝั่งผู้เล่น ณ มิลลิวินาทีที่ได้รับสัญญาณ
+                if (data.state === 'GO') {
                     isGoState = true;
+                    if (data.goTime) {
+                        serverGoTime = data.goTime; // ใช้เวลาประทับตรงจาก Host/Server
+                    }
                 }
                 lastState = data.state;
 
                 if (data.state === 'WAITING') {
                     hasPressed = false;
-                    localGoTime = 0;
+                    serverGoTime = 0;
                     isGoState = false;
                     btn.disabled = true;
                     btn.className = 'buzz-btn';
