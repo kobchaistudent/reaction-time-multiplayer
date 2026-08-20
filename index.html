@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -20,7 +20,7 @@
         
         .buzz-btn { width: 100%; height: 48vh; font-size: 3rem; font-weight: 900; color: white; border: none; border-radius: 24px; cursor: pointer; touch-action: manipulation; }
         .buzz-btn.warning { background: linear-gradient(145deg, #e67e22, #d35400); }
-        .buzz-btn.active { background: linear-gradient(145deg, #2ecc71, #27ae60); }
+        .buzz-btn.active { background: linear-gradient(145deg, #3498db, #2980b9); } /* ปุ่มสีฟ้าตอนไฟดับกดได้ */
         .buzz-btn:disabled { background: #22222b; color: #555; cursor: not-allowed; border: 1px solid #333; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
@@ -81,17 +81,13 @@
             document.getElementById('join-box').style.display = 'block';
         }
 
-        // ดักฟังกรณีถูก Host เตะ หรือสั่งเปลี่ยนชื่อ
         function listenPlayerRemoval() {
             playerRef.on('value', snapshot => {
                 if (!snapshot.exists()) {
-                    // ตรวจสอบว่าโดนเตะ หรือ โดนเปลี่ยนชื่อ
                     db.ref('players').once('value', allSnap => {
                         let foundNewName = false;
                         allSnap.forEach(child => {
-                            if (child.val().time === 0 && child.key !== myName) {
-                                // พบว่ามีการย้ายชื่อจาก Host
-                            }
+                            if (child.val().time === 0 && child.key !== myName) {}
                         });
                         if (!foundNewName && document.getElementById('game-box').style.display !== 'none') {
                             alert("คุณถูก Host เชิญออกจากห้อง หรือข้อมูลชื่อถูกแก้ไข");
@@ -154,7 +150,7 @@
                 } else if (data.state === 'GO' && !hasPressed) {
                     btn.disabled = false;
                     btn.className = 'buzz-btn active';
-                    document.getElementById('msg').innerText = '🔥 กดเลย! (GO!)';
+                    document.getElementById('msg').innerText = '🔥 ไฟดับแล้ว! กดเลย! (GO!)';
                 }
             });
         }
