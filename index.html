@@ -16,7 +16,6 @@
         .buzz-btn { width: 100%; height: 50vh; font-size: 3rem; font-weight: 900; background: linear-gradient(145deg, #f39c12, #d35400); color: white; border: none; border-radius: 24px; cursor: pointer; touch-action: manipulation; }
         .buzz-btn:disabled { background: #22222b; color: #555; cursor: not-allowed; }
     </style>
-    <!-- โหลด Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 </head>
@@ -42,18 +41,28 @@
         let myName = '';
         let hasPressed = false;
         let clientGoTime = 0;
+        let playerRef = null;
 
         function join() {
             myName = document.getElementById('pname').value.trim();
             if (myName) {
                 document.getElementById('join-box').style.display = 'none';
                 document.getElementById('game-box').style.display = 'flex';
+                
+                playerRef = db.ref('players/' + myName);
+                
+                // บันทึกสถานะเข้าห้องเล่น
+                playerRef.set({ name: myName, status: 'WAITING', time: 0 });
+                
+                // เมื่อปิดเบราว์เซอร์หรือเน็ตหลุด ให้ลบชื่อออกจาก Firebase ทันที
+                playerRef.onDisconnect().remove();
+
                 listenState();
             }
         }
 
         function press() {
-            if (hasPressed) return;
+            if (hasPressed || !playerRef) return;
             const pressTime = Date.now();
             hasPressed = true;
             document.getElementById('btn').disabled = true;
@@ -62,10 +71,10 @@
 
             if (clientGoTime === 0 || finalTime <= 0) {
                 document.getElementById('msg').innerText = '❌ JUMP START (ฟาวล์!)';
-                db.ref('players/' + myName).set({ name: myName, status: 'JUMP_START', time: 0 });
+                playerRef.update({ status: 'JUMP_START', time: 0 });
             } else {
                 document.getElementById('msg').innerText = `👍 เวลาของคุณ: ${finalTime} ms`;
-                db.ref('players/' + myName).set({ name: myName, status: 'OK', time: finalTime });
+                playerRef.update({ status: 'OK', time: finalTime });
             }
         }
 
@@ -89,6 +98,9 @@
                     clientGoTime = 0;
                     document.getElementById('btn').disabled = false;
                     document.getElementById('msg').innerText = 'รอ Host เริ่มไฟ...';
+                    if (playerRef) {
+                        playerRef.update({ status: 'WAITING', time: 0 });
+                    }
                 }
             });
         }
