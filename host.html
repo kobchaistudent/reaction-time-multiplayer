@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -33,12 +33,12 @@
     <div class="card">
         <h3>เลือกโหมดการเล่น</h3>
         <div class="mode-selector" style="margin-top:10px;">
-            <button id="mode-auto" class="mode-btn active" onclick="setMode('AUTO')">⚡ อัตโนมัติ (สุ่มไฟเขียว)</button>
-            <button id="mode-manual" class="mode-btn" onclick="setMode('MANUAL')">🕹️ แมนนวล (Host กดไฟเขียวเอง)</button>
+            <button id="mode-auto" class="mode-btn active" onclick="setMode('AUTO')">⚡ อัตโนมัติ (สุ่มเวลาไฟดับ)</button>
+            <button id="mode-manual" class="mode-btn" onclick="setMode('MANUAL')">🕹️ แมนนวล (Host กดดับไฟเอง)</button>
         </div>
         
         <button id="start-btn" class="btn-ctrl btn-start" onclick="startSequence()">🚦 เริ่มเปิดไฟ (START)</button>
-        <button id="manual-go-btn" class="btn-ctrl btn-go" style="display:none;" onclick="triggerManualGo()" disabled>🔥 กดเปิดไฟเขียว (GO!)</button>
+        <button id="manual-go-btn" class="btn-ctrl btn-go" style="display:none;" onclick="triggerManualGo()" disabled>🔥 ดับไฟแดงทั้งหมด (LIGHTS OUT!)</button>
         <button class="btn-ctrl btn-reset" onclick="resetGame()">🔄 รีเซ็ตเกมทั้งหมด</button>
     </div>
 
@@ -63,7 +63,6 @@
         const db = firebase.database();
 
         let currentMode = 'AUTO';
-        let currentState = 'WAITING';
         let autoTimer = null;
 
         function setMode(mode) {
@@ -90,7 +89,7 @@
                             db.ref('gameState').set({ state: 'GO', lights: 0, mode: currentMode, goTime: Date.now() });
                         }, randomDelay);
                     } else {
-                        // โหมด Manual: รอ Host กดปุ่ม GO
+                        // โหมด Manual: รอ Host กดดับไฟเอง
                         document.getElementById('manual-go-btn').disabled = false;
                     }
                 }
@@ -109,7 +108,6 @@
             
             db.ref('gameState').set({ state: 'WAITING', lights: 0, mode: currentMode });
             
-            // รีเซ็ตสถานะผู้เล่นทุกคนเป็น WAITING
             db.ref('players').once('value', snapshot => {
                 const players = snapshot.val();
                 for (let key in players) {
@@ -118,7 +116,6 @@
             });
         }
 
-        // ดักฟังและแสดงรายชื่อผู้เล่น Real-time
         db.ref('players').on('value', snapshot => {
             const tbody = document.getElementById('player-list');
             tbody.innerHTML = '';
