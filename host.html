@@ -4,16 +4,18 @@
     <meta charset="UTF-8">
     <title>F1 HOST SCREEN (Firebase Free 100%)</title>
     <style>
-        body { background: #111; color: white; font-family: sans-serif; text-align: center; }
-        .board { display: flex; justify-content: center; gap: 12px; margin: 20px 0; }
+        body { background: #111; color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; }
+        .board { display: flex; justify-content: center; gap: 12px; margin: 30px 0; }
         .light-box { background: #222; padding: 12px; border-radius: 8px; border: 1px solid #333; }
-        .bulb { width: 45px; height: 45px; background: #333; border-radius: 50%; margin: 6px 0; }
-        .bulb.red { background: #ff0000; box-shadow: 0 0 18px #ff0000; }
-        .bulb.green { background: #00ff00; box-shadow: 0 0 18px #00ff00; }
-        button { font-size: 1.2rem; padding: 10px 20px; background: #ff1801; color: white; border: none; cursor: pointer; border-radius: 5px; margin: 5px; }
+        .bulb { width: 50px; height: 50px; background: #333; border-radius: 50%; margin: 8px 0; transition: background 0.1s; }
+        .bulb.red { background: #ff0000; box-shadow: 0 0 20px #ff0000; }
+        .bulb.green { background: #00ff00; box-shadow: 0 0 20px #00ff00; }
+        button { font-size: 1.2rem; font-weight: bold; padding: 12px 24px; background: #ff1801; color: white; border: none; cursor: pointer; border-radius: 8px; margin: 5px; }
+        button:disabled { background: #444; cursor: not-allowed; }
         .container { display: flex; justify-content: center; margin-top: 20px; }
-        .panel { background: #1e1e1e; padding: 15px 25px; border-radius: 10px; width: 320px; text-align: left; }
+        .panel { background: #1e1e1e; padding: 20px 30px; border-radius: 12px; width: 350px; text-align: left; }
         ol { padding-left: 25px; font-size: 1.2rem; }
+        li { margin-bottom: 8px; }
     </style>
     <!-- โหลด Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
@@ -23,11 +25,11 @@
     <h1>F1 HOST SCREEN</h1>
     
     <div class="board">
-        <div class="light-box"><div class="bulb green-bulb" id="g1"></div><div class="bulb red-bulb" id="r1"></div></div>
-        <div class="light-box"><div class="bulb green-bulb" id="g2"></div><div class="bulb red-bulb" id="r2"></div></div>
-        <div class="light-box"><div class="bulb green-bulb" id="g3"></div><div class="bulb red-bulb" id="r3"></div></div>
-        <div class="light-box"><div class="bulb green-bulb" id="g4"></div><div class="bulb red-bulb" id="r4"></div></div>
-        <div class="light-box"><div class="bulb green-bulb" id="g5"></div><div class="bulb red-bulb" id="r5"></div></div>
+        <div class="light-box"><div class="bulb" id="g1"></div><div class="bulb" id="r1"></div></div>
+        <div class="light-box"><div class="bulb" id="g2"></div><div class="bulb" id="r2"></div></div>
+        <div class="light-box"><div class="bulb" id="g3"></div><div class="bulb" id="r3"></div></div>
+        <div class="light-box"><div class="bulb" id="g4"></div><div class="bulb" id="r4"></div></div>
+        <div class="light-box"><div class="bulb" id="g5"></div><div class="bulb" id="r5"></div></div>
     </div>
 
     <button id="start-btn" onclick="startLights()">START LIGHTS</button>
@@ -66,7 +68,7 @@
 
         let playedRed = [false, false, false, false, false];
         let playedGreen = false;
-        let timerInterval = null;
+        let renderInterval = null;
 
         function startLights() {
             initAudio();
@@ -75,8 +77,8 @@
             playedGreen = false;
 
             const now = Date.now();
-            const randomDelay = Math.floor(Math.random() * 2000) + 1500;
-            const goTime = now + 5000 + randomDelay;
+            const randomDelay = Math.floor(Math.random() * 2000) + 1500; // สุ่มเวลาดับไฟ 1.5 - 3.5 วินาที
+            const goTime = now + 5000 + randomDelay; // 5 วินาทีแรกขึ้นไฟแดงทีละดวง
 
             db.ref('players').remove();
             db.ref('gameState').set({
@@ -84,47 +86,72 @@
                 lightsStartTime: now,
                 goTime: goTime
             });
-
-            if (timerInterval) clearInterval(timerInterval);
-            timerInterval = setInterval(() => {
-                const current = Date.now();
-                if (current >= goTime) {
-                    db.ref('gameState/state').set('GO');
-                    clearInterval(timerInterval);
-                }
-            }, 50);
         }
 
         function resetGame() {
-            if (timerInterval) clearInterval(timerInterval);
+            if (renderInterval) clearInterval(renderInterval);
             db.ref('gameState').set({ state: 'WAITING', lightsStartTime: 0, goTime: 0 });
             db.ref('players').remove();
             document.getElementById('start-btn').disabled = false;
+            clearAllLights();
         }
 
+        function clearAllLights() {
+            for(let i=1; i<=5; i++) {
+                document.getElementById('r' + i).classList.remove('red');
+                document.getElementById('g' + i).classList.remove('green');
+            }
+        }
+
+        // คอยวาดไฟแบบเรียลไทม์ทุกๆ 30ms
         db.ref('gameState').on('value', snapshot => {
             const data = snapshot.val();
             if (!data) return;
 
-            const now = Date.now();
-            for(let i=1; i<=5; i++) {
-                const redBulb = document.getElementById('r' + i);
-                const greenBulb = document.getElementById('g' + i);
-                redBulb.classList.remove('red');
-                greenBulb.classList.remove('green');
+            if (renderInterval) clearInterval(renderInterval);
+
+            if (data.state === 'WAITING') {
+                clearAllLights();
+                document.getElementById('start-btn').disabled = false;
+                return;
+            }
+
+            renderInterval = setInterval(() => {
+                const now = Date.now();
+
+                // ถ้าถึงเวลาปล่อยตัว (GO)
+                if (now >= data.goTime && data.state === 'LIGHTS_ON') {
+                    db.ref('gameState/state').set('GO');
+                }
 
                 if (data.state === 'LIGHTS_ON') {
-                    if (now >= data.lightsStartTime + (i * 1000)) {
-                        redBulb.classList.add('red');
-                        if (!playedRed[i - 1]) { playBeep(440, 0.15); playedRed[i - 1] = true; }
+                    // เปิดไฟสีแดงทีละดวง ทุกๆ 1 วินาที (1000ms, 2000ms, 3000ms, 4000ms, 5000ms)
+                    for (let i = 1; i <= 5; i++) {
+                        const redBulb = document.getElementById('r' + i);
+                        if (now >= data.lightsStartTime + (i * 1000)) {
+                            redBulb.classList.add('red');
+                            if (!playedRed[i - 1]) {
+                                playBeep(440, 0.15);
+                                playedRed[i - 1] = true;
+                            }
+                        }
                     }
                 } else if (data.state === 'GO') {
-                    greenBulb.classList.add('green');
-                    if (!playedGreen) { playBeep(880, 0.4); playedGreen = true; }
+                    // ปิดไฟแดงทั้งหมด แล้วเปิดไฟเขียว
+                    for (let i = 1; i <= 5; i++) {
+                        document.getElementById('r' + i).classList.remove('red');
+                        document.getElementById('g' + i).classList.add('green');
+                    }
+                    if (!playedGreen) {
+                        playBeep(880, 0.4);
+                        playedGreen = true;
+                    }
+                    clearInterval(renderInterval);
                 }
-            }
+            }, 30);
         });
 
+        // อัปเดต Leaderboard
         db.ref('players').on('value', snapshot => {
             const board = document.getElementById('leaderboard');
             board.innerHTML = '';
