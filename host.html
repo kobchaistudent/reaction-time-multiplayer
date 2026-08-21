@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>F1 Host Control</title>
+    <title>Host Control</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: #0f0f13; color: white; font-family: sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
@@ -31,12 +31,12 @@
 </head>
 <body>
 
-    <h1>🏎️ F1 Host Controller</h1>
+    <h1>🏎️ Host Controller</h1>
 
     <div class="card">
         <h3>📺 โหมดหน้าจอใหญ่ (Screen View)</h3>
         <div class="selector-group">
-            <button id="view-lights" class="select-btn screen-active" onclick="setScreenView('LIGHTS')">🚦 หน้าไฟ F1</button>
+            <button id="view-lights" class="select-btn screen-active" onclick="setScreenView('LIGHTS')">🚦 หน้าสัญญาณไฟ</button>
             <button id="view-board" class="select-btn" onclick="setScreenView('LEADERBOARD')">🏆 หน้า Leaderboard</button>
         </div>
     </div>
@@ -49,7 +49,7 @@
         </div>
         
         <button id="start-btn" class="btn-ctrl btn-start" onclick="startSequence()">🚦 เริ่มเปิดไฟ (START)</button>
-        <p id="screen-hint" class="hint">⚠️ ต้องเปลี่ยนเป็น "หน้าไฟ F1" และ "รีเซ็ตเกม" ก่อนจึงจะเริ่มได้</p>
+        <p id="screen-hint" class="hint">⚠️ ต้องเปลี่ยนเป็น "หน้าสัญญาณไฟ" และ "รีเซ็ตเกม" ก่อนจึงจะเริ่มได้</p>
         
         <button id="manual-go-btn" class="btn-ctrl btn-go" style="display:none;" onclick="triggerManualGo()" disabled>🔥 ดับไฟแดงทั้งหมด (LIGHTS OUT!)</button>
         <button class="btn-ctrl btn-reset" onclick="resetGame()">🔄 รีเซ็ตเกมทั้งหมด</button>
@@ -80,6 +80,7 @@
         let isGameRunning = false;
         let isResetDone = true;
         let serverOffset = 0;
+        let manualUnlockTimer = null;
 
         db.ref('.info/serverTimeOffset').on('value', snap => {
             serverOffset = snap.val() || 0;
@@ -112,6 +113,7 @@
             document.getElementById('mode-auto').className = 'select-btn ' + (mode === 'AUTO' ? 'active' : '');
             document.getElementById('mode-manual').className = 'select-btn ' + (mode === 'MANUAL' ? 'active' : '');
             document.getElementById('manual-go-btn').style.display = (mode === 'MANUAL') ? 'block' : 'none';
+            document.getElementById('manual-go-btn').disabled = true;
             db.ref('gameState/mode').set(mode);
         }
 
@@ -127,7 +129,6 @@
             let targetGoTime = 0;
 
             if (currentMode === 'AUTO') {
-                // สุ่มช่วงเวลาดับไฟให้คาดเดายากยิ่งขึ้น (1.2 วินาที ถึง 4.5 วินาที)
                 const randomDelay = Math.floor(Math.random() * 3300) + 1200;
                 targetGoTime = sequenceStartTime + 5000 + randomDelay;
             }
@@ -141,9 +142,15 @@
             });
 
             if (currentMode === 'MANUAL') {
-                setTimeout(() => {
-                    document.getElementById('manual-go-btn').disabled = false;
-                }, 5400);
+                const manualGoBtn = document.getElementById('manual-go-btn');
+                manualGoBtn.disabled = true;
+                
+                const delayUntilFifthLight = Math.max(0, (sequenceStartTime + 4000) - now);
+                manualUnlockTimer = setTimeout(() => {
+                    if (isGameRunning) {
+                        manualGoBtn.disabled = false;
+                    }
+                }, delayUntilFifthLight);
             }
         }
 
@@ -157,11 +164,14 @@
         }
 
         function resetGame() {
+            if (manualUnlockTimer) clearTimeout(manualUnlockTimer);
+            
             isGameRunning = false;
             isResetDone = true;
             
-            document.getElementById('manual-go-btn').style.display = (currentMode === 'MANUAL') ? 'block' : 'none';
-            document.getElementById('manual-go-btn').disabled = true;
+            const manualBtn = document.getElementById('manual-go-btn');
+            manualBtn.style.display = (currentMode === 'MANUAL') ? 'block' : 'none';
+            manualBtn.disabled = true;
             
             db.ref('gameState').set({ 
                 state: 'WAITING', 
