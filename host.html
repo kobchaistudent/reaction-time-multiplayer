@@ -14,6 +14,7 @@
         .select-btn.active { background: #f39c12; color: black; border-color: #f39c12; }
         .select-btn.screen-active { background: #3498db; color: white; border-color: #3498db; }
         .btn-ctrl { width: 100%; padding: 15px; font-size: 1.2rem; font-weight: bold; border-radius: 12px; border: none; cursor: pointer; margin-bottom: 10px; }
+        .btn-ctrl:disabled { opacity: 0.3; cursor: not-allowed; }
         .btn-start { background: #2ecc71; color: white; }
         .btn-go { background: #e74c3c; color: white; }
         .btn-reset { background: #e67e22; color: white; }
@@ -23,6 +24,7 @@
         .action-btn { padding: 5px 10px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.85rem; margin-right: 5px; }
         .btn-kick { background: #e74c3c; color: white; }
         .btn-edit { background: #3498db; color: white; }
+        .hint { color: #e74c3c; font-size: 0.9rem; margin-top: 5px; display: none; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -47,6 +49,8 @@
         </div>
         
         <button id="start-btn" class="btn-ctrl btn-start" onclick="startSequence()">🚦 เริ่มเปิดไฟ (START)</button>
+        <p id="screen-hint" class="hint">⚠️ ต้องเปลี่ยนเป็น "หน้าไฟ F1" และ "รีเซ็ตเกม" ก่อนจึงจะเริ่มได้</p>
+        
         <button id="manual-go-btn" class="btn-ctrl btn-go" style="display:none;" onclick="triggerManualGo()" disabled>🔥 ดับไฟแดงทั้งหมด (LIGHTS OUT!)</button>
         <button class="btn-ctrl btn-reset" onclick="resetGame()">🔄 รีเซ็ตเกมทั้งหมด</button>
     </div>
@@ -72,36 +76,60 @@
         const db = firebase.database();
 
         let currentMode = 'AUTO';
+        let currentScreen = 'LIGHTS';
+        let isGameRunning = false;
+        let isResetDone = true;
         let serverOffset = 0;
 
         db.ref('.info/serverTimeOffset').on('value', snap => {
             serverOffset = snap.val() || 0;
         });
 
+        function checkControlState() {
+            const startBtn = document.getElementById('start-btn');
+            const hint = document.getElementById('screen-hint');
+            
+            if (currentScreen === 'LIGHTS' && isResetDone && !isGameRunning) {
+                startBtn.disabled = false;
+                hint.style.display = 'none';
+            } else {
+                startBtn.disabled = true;
+                hint.style.display = 'block';
+            }
+        }
+
         function setScreenView(viewMode) {
+            currentScreen = viewMode;
             document.getElementById('view-lights').className = 'select-btn ' + (viewMode === 'LIGHTS' ? 'screen-active' : '');
             document.getElementById('view-board').className = 'select-btn ' + (viewMode === 'LEADERBOARD' ? 'screen-active' : '');
             db.ref('gameState/screenView').set(viewMode);
+            checkControlState();
         }
 
         function setMode(mode) {
+            if (isGameRunning) return;
             currentMode = mode;
             document.getElementById('mode-auto').className = 'select-btn ' + (mode === 'AUTO' ? 'active' : '');
             document.getElementById('mode-manual').className = 'select-btn ' + (mode === 'MANUAL' ? 'active' : '');
+            document.getElementById('manual-go-btn').style.display = (mode === 'MANUAL') ? 'block' : 'none';
             db.ref('gameState/mode').set(mode);
         }
 
         function startSequence() {
-            resetGame();
-            setScreenView('LIGHTS');
-            
+            if (currentScreen !== 'LIGHTS' || !isResetDone || isGameRunning) return;
+
+            isGameRunning = true;
+            isResetDone = false;
+            checkControlState();
+
             const now = Date.now() + serverOffset;
-            const sequenceStartTime = now + 500; // ให้เวลาเครื่องอื่นรับตารางเวลา่วงหน้า 0.5 วินาที
+            const sequenceStartTime = now + 400; 
             let targetGoTime = 0;
 
             if (currentMode === 'AUTO') {
-                const randomDelay = Math.floor(Math.random() * 2000) + 1000;
-                targetGoTime = sequenceStartTime + 5000 + randomDelay; // ไฟแดง 5 ดวง (5 วินาที) + เวลาสุ่ม
+                // สุ่มช่วงเวลาดับไฟให้คาดเดายากยิ่งขึ้น (1.2 วินาที ถึง 4.5 วินาที)
+                const randomDelay = Math.floor(Math.random() * 3300) + 1200;
+                targetGoTime = sequenceStartTime + 5000 + randomDelay;
             }
 
             db.ref('gameState').set({
@@ -115,7 +143,7 @@
             if (currentMode === 'MANUAL') {
                 setTimeout(() => {
                     document.getElementById('manual-go-btn').disabled = false;
-                }, 5500);
+                }, 5400);
             }
         }
 
@@ -129,10 +157,18 @@
         }
 
         function resetGame() {
+            isGameRunning = false;
+            isResetDone = true;
+            
             document.getElementById('manual-go-btn').style.display = (currentMode === 'MANUAL') ? 'block' : 'none';
             document.getElementById('manual-go-btn').disabled = true;
             
-            db.ref('gameState').set({ state: 'WAITING', mode: currentMode, screenView: 'LIGHTS' });
+            db.ref('gameState').set({ 
+                state: 'WAITING', 
+                mode: currentMode, 
+                screenView: currentScreen,
+                resetAt: Date.now() + serverOffset
+            });
             
             db.ref('players').once('value', snapshot => {
                 const players = snapshot.val();
@@ -140,6 +176,8 @@
                     db.ref(`players/${key}`).update({ status: 'WAITING', time: 0 });
                 }
             });
+
+            checkControlState();
         }
 
         db.ref('players').on('value', snapshot => {
@@ -156,6 +194,7 @@
                 let statusText = p.status;
                 if (p.status === 'OK') statusText = '🟢 สำเร็จ';
                 else if (p.status === 'JUMP_START') statusText = '🔴 JUMP START (ฟาวล์)';
+                else if (p.status === 'LOCKED') statusText = '🔒 มาไม่ทันรอบนี้';
                 else statusText = '⚪ รอ...';
 
                 tr.innerHTML = `
@@ -190,6 +229,8 @@
                 db.ref(`players/${name}`).remove();
             }
         }
+
+        checkControlState();
     </script>
 </body>
 </html>
