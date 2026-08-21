@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Player Buzzer</title>
+    <title>F1 Player Buzzer</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: #0f0f13; color: white; font-family: sans-serif; text-align: center; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 16px; }
@@ -50,6 +50,7 @@
 
         let myName = '';
         let hasPressed = false;
+        let isLateJoiner = false;
         let serverOffset = 0;
         let currentGameState = null;
         let playerRef = null;
@@ -66,9 +67,20 @@
                 document.getElementById('game-box').style.display = 'flex';
                 
                 playerRef = db.ref('players/' + myName);
-                playerRef.set({ name: myName, status: 'WAITING', time: 0 });
-                playerRef.onDisconnect().remove();
 
+                // เช็คว่าเกมกำลังดำเนินอยู่หรือไม่ถ้าเพิ่งเข้ามา
+                db.ref('gameState').once('value', snap => {
+                    const st = snap.val();
+                    if (st && (st.state === 'STARTING' || st.state === 'MANUAL_GO')) {
+                        isLateJoiner = true;
+                        playerRef.set({ name: myName, status: 'LOCKED', time: 0 });
+                    } else {
+                        isLateJoiner = false;
+                        playerRef.set({ name: myName, status: 'WAITING', time: 0 });
+                    }
+                });
+
+                playerRef.onDisconnect().remove();
                 listenPlayerRemoval();
                 listenState();
             }
@@ -81,6 +93,7 @@
                 playerRef = null;
             }
             hasPressed = false;
+            isLateJoiner = false;
             document.getElementById('game-box').style.display = 'none';
             document.getElementById('join-box').style.display = 'block';
         }
@@ -102,18 +115,36 @@
 
         function press() {
             const btn = document.getElementById('btn');
-            if (hasPressed || !playerRef || btn.disabled || !currentGameState) return;
+            if (hasPressed || !playerRef || btn.disabled || !currentGameState || isLateJoiner) return;
             
             const pressTime = Date.now() + serverOffset;
             hasPressed = true;
             btn.disabled = true;
             btn.className = 'buzz-btn';
 
+            // ตรวจสอบโหมด MANUAL
+            if (currentGameState.mode === 'MANUAL') {
+                if (currentGameState.state === 'MANUAL_GO' && currentGameState.goTime > 0) {
+                    let reactionTime = pressTime - currentGameState.goTime;
+                    if (reactionTime > 0) {
+                        document.getElementById('msg').innerText = `👍 เวลาของคุณ: ${reactionTime} ms`;
+                        playerRef.update({ status: 'OK', time: reactionTime });
+                    } else {
+                        document.getElementById('msg').innerText = '❌ JUMP START (ฟาวล์!)';
+                        playerRef.update({ status: 'JUMP_START', time: 0 });
+                    }
+                } else {
+                    document.getElementById('msg').innerText = '❌ JUMP START (ฟาวล์!)';
+                    playerRef.update({ status: 'JUMP_START', time: 0 });
+                }
+                return;
+            }
+
+            // ตรวจสอบโหมด AUTO
             let targetGoTime = currentGameState.goTime;
             let reactionTime = pressTime - targetGoTime;
 
-            // ถ้ากดก่อนไฟดับ (โหมด AUTO) หรือกดก่อน Host ดับไฟ (โหมด MANUAL)
-            if (currentGameState.state === 'WAITING' || (currentGameState.mode === 'AUTO' && reactionTime <= 0) || (currentGameState.mode === 'MANUAL' && currentGameState.state !== 'MANUAL_GO')) {
+            if (pressTime < targetGoTime) {
                 document.getElementById('msg').innerText = '❌ JUMP START (ฟาวล์!)';
                 playerRef.update({ status: 'JUMP_START', time: 0 });
             } else {
@@ -132,9 +163,14 @@
 
                 if (data.state === 'WAITING') {
                     hasPressed = false;
+                    isLateJoiner = false; // ปลดล็อคเมื่อ Host สั่งรีเซ็ตเกม
                     btn.disabled = true;
                     btn.className = 'buzz-btn';
                     document.getElementById('msg').innerText = 'รอ Host เริ่มไฟ...';
+                } else if (isLateJoiner) {
+                    btn.disabled = true;
+                    btn.className = 'buzz-btn';
+                    document.getElementById('msg').innerText = '🔒 เกมเริ่มแล้ว (รอรอบถัดไป)';
                 } else if (!hasPressed) {
                     btn.disabled = false;
                     btn.className = 'buzz-btn warning';
