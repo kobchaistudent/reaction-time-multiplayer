@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>All In One Screen</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #050508; color: white; font-family: sans-serif; display: flex; flex-direction: column; justify-content: space-between; align-items: center; min-height: 100vh; padding: 20px; }
+        
+        #disabled-screen { display: flex; justify-content: center; align-items: center; height: 100vh; font-size: 2rem; color: #e74c3c; font-weight: bold; }
+        
+        #main-content { width: 100%; display: flex; flex-direction: column; align-items: center; flex: 1; justify-content: center; }
+        #lights-view { display: flex; justify-content: center; align-items: center; margin-bottom: 20px; }
+        .light-board { display: flex; gap: 15px; background: #111; padding: 30px; border-radius: 20px; border: 3px solid #222; }
+        .light-column { display: flex; flex-direction: column; gap: 15px; background: #000; padding: 12px; border-radius: 12px; }
+        .light { width: 70px; height: 70px; border-radius: 50%; background: #222; }
+        .light.red { background: #ff0000; box-shadow: 0 0 35px #ff0000; }
+
+        #board-view { width: 100%; max-width: 800px; display: none; flex-direction: column; align-items: center; }
+        .board-title { font-size: 2.2rem; color: #f39c12; margin-bottom: 15px; }
+        .leaderboard-table { width: 100%; border-collapse: separate; border-spacing: 0 8px; }
+        .leaderboard-table th { color: #888; padding: 8px 15px; text-align: left; }
+        .leaderboard-row { background: #12121a; }
+        .leaderboard-row td { padding: 12px 15px; font-size: 1.2rem; font-weight: bold; }
+        .leaderboard-row.foul { color: #e74c3c; }
+
+        .control-bar { width: 100%; max-width: 600px; display: flex; gap: 15px; margin-top: 20px; }
+        .btn-aio { flex: 1; padding: 15px; border-radius: 12px; border: none; font-size: 1.1rem; font-weight: bold; cursor: pointer; color: white; }
+        .btn-auto-start { background: #2ecc71; }
+        .btn-toggle-view { background: #3498db; }
+        .btn-aio:disabled { opacity: 0.3; cursor: not-allowed; }
+    </style>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+</head>
+<body>
+
+    <div id="disabled-screen" style="display:none;">
+        🚫 หน้านี้ถูกปิดการใช้งานโดย Host
+    </div>
+
+    <div id="main-content">
+        <div id="lights-view">
+            <div class="light-board">
+                <div class="light-column"><div class="light" id="l1"></div></div>
+                <div class="light-column"><div class="light" id="l2"></div></div>
+                <div class="light-column"><div class="light" id="l3"></div></div>
+                <div class="light-column"><div class="light" id="l4"></div></div>
+                <div class="light-column"><div class="light" id="l5"></div></div>
+            </div>
+        </div>
+
+        <div id="board-view">
+            <h1 class="board-title">🏆 LEADERBOARD</h1>
+            <table class="leaderboard-table">
+                <thead>
+                    <tr>
+                        <th>NO</th>
+                        <th>NAME</th>
+                        <th style="text-align: right;">TIME</th>
+                    </tr>
+                </thead>
+                <tbody id="board-list"></tbody>
+            </table>
+        </div>
+
+        <div class="control-bar">
+            <button id="start-auto-btn" class="btn-aio btn-auto-start" onclick="startAutoGame()">⚡เริ่มเกม (AUTO)</button>
+            <button id="toggle-view-btn" class="btn-aio btn-toggle-view" onclick="toggleView()">🔄 สลับหน้าจอ</button>
+        </div>
+    </div>
+
+    <script>
+        const FIREBASE_URL = "https://reaction-time-multiplayer-default-rtdb.asia-southeast1.firebasedatabase.app/";
+        firebase.initializeApp({ databaseURL: FIREBASE_URL });
+        const db = firebase.database();
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let serverOffset = 0;
+        let animFrame = null;
+        let currentScreen = 'LIGHTS';
+        let isGameRunning = false;
+
+        db.ref('.info/serverTimeOffset').on('value', snap => { serverOffset = snap.val() || 0; });
+
+        db.ref('gameState/aioEnabled').on('value', snap => {
+            const enabled = snap.val() === true;
+            document.getElementById('disabled-screen').style.display = enabled ? 'none' : 'flex';
+            document.getElementById('main-content').style.display = enabled ? 'flex' : 'none';
+        });
+
+        function playBeep(freq = 440, duration = 0.15) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.frequency.value = freq;
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration);
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function toggleView() {
+            currentScreen = (currentScreen === 'LIGHTS') ? 'LEADERBOARD' : 'LIGHTS';
+            document.getElementById('lights-view').style.display = (currentScreen === 'LIGHTS') ? 'flex' : 'none';
+            document.getElementById('board-view').style.display = (currentScreen === 'LEADERBOARD') ? 'flex' : 'none';
+        }
+
+        function startAutoGame() {
+            if (isGameRunning) return;
+            
+            const now = Date.now() + serverOffset;
+            const sequenceStartTime = now + 400;
+            const randomDelay = Math.floor(Math.random() * 3000) + 1000;
+            const targetGoTime = sequenceStartTime + 4000 + randomDelay;
+
+            db.ref('gameState').set({
+                state: 'STARTING',
+                startTime: sequenceStartTime,
+                goTime: targetGoTime,
+                mode: 'AUTO',
+                screenView: currentScreen,
+                aioEnabled: true
+            });
+        }
+
+        let currentLights = 0;
+        let isGoPlayed = false;
+
+        db.ref('gameState').on('value', snapshot => {
+            const data = snapshot.val();
+            if (!data) return;
+
+            if (animFrame) cancelAnimationFrame(animFrame);
+            const lights = [document.getElementById('l1'), document.getElementById('l2'), document.getElementById('l3'), document.getElementById('l4'), document.getElementById('l5')];
+
+            if (data.state === 'WAITING') {
+                isGameRunning = false;
+                currentLights = 0;
+                isGoPlayed = false;
+                lights.forEach(l => l.className = 'light');
+                document.getElementById('start-auto-btn').disabled = false;
+            } else {
+                isGameRunning = true;
+                document.getElementById('start-auto-btn').disabled = true;
+
+                function updateDisplay() {
+                    const now = Date.now() + serverOffset;
+                    if (data.state === 'STARTING') {
+                        const elapsed = now - data.startTime;
+                        if (elapsed < 0) {
+                            lights.forEach(l => l.className = 'light');
+                        } else if (data.mode === 'AUTO' && data.goTime > 0 && now >= data.goTime) {
+                            lights.forEach(l => l.className = 'light');
+                            if (!isGoPlayed) {
+                                playBeep(880, 0.3);
+                                isGoPlayed = true;
+                            }
+                        } else {
+                            let activeCount = Math.min(5, Math.floor(elapsed / 1000) + 1);
+                            lights.forEach((l, idx) => { l.className = idx < activeCount ? 'light red' : 'light'; });
+                            if (activeCount > currentLights && activeCount <= 5) {
+                                playBeep(440, 0.15);
+                                currentLights = activeCount;
+                            }
+                        }
+                    } else if (data.state === 'MANUAL_GO') {
+                        lights.forEach(l => l.className = 'light');
+                    }
+                    animFrame = requestAnimationFrame(updateDisplay);
+                }
+                updateDisplay();
+            }
+        });
+
+        db.ref('players').on('value', snapshot => {
+            const tbody = document.getElementById('board-list');
+            tbody.innerHTML = '';
+            const players = snapshot.val() || {};
+            let list = Object.values(players);
+
+            list.sort((a, b) => {
+                if (a.status === 'OK' && b.status === 'OK') return a.time - b.time;
+                if (a.status === 'OK') return -1;
+                if (b.status === 'OK') return 1;
+                return 0;
+            });
+
+            list.forEach((p, index) => {
+                const tr = document.createElement('tr');
+                const isFoul = p.status !== 'OK';
+                tr.className = `leaderboard-row ${isFoul ? 'foul' : ''}`;
+                tr.innerHTML = `
+                    <td>${isFoul ? '-' : (index + 1)}</td>
+                    <td>${p.name}</td>
+                    <td style="text-align:right;">${p.status === 'OK' ? p.time + ' ms' : p.status}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        });
+    </script>
+</body>
+</html>
