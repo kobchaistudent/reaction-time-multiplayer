@@ -2,56 +2,43 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Player Buzzer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Player Screen</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #0f0f13; color: white; font-family: sans-serif; text-align: center; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 16px; position: relative; }
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body { background: #0f0f13; color: white; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; overflow: hidden; }
         
-        /* Non-blocking Banner Notification */
-        #toast-banner {
-            position: fixed; top: 15px; left: 50%; transform: translateX(-50%);
-            background: rgba(243, 156, 18, 0.95); color: #000; font-weight: bold;
-            padding: 12px 24px; border-radius: 30px; font-size: 1rem;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 9999;
-            display: none; pointer-events: none; transition: opacity 0.3s;
-        }
+        .login-card { background: #181820; padding: 30px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.08); width: 90%; max-width: 400px; }
+        .login-card input { width: 100%; padding: 15px; border-radius: 10px; border: 1px solid #444; background: #222; color: #fff; font-size: 1.1rem; text-align: center; margin-bottom: 15px; }
+        .login-card button { width: 100%; padding: 15px; background: #2ecc71; color: white; border: none; border-radius: 10px; font-size: 1.1rem; font-weight: bold; cursor: pointer; }
+        
+        .game-area { display: none; width: 100vw; height: 100vh; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; transition: background 0.2s; }
+        .game-area.waiting { background: #181820; }
+        .game-area.ready { background: #c0392b; }
+        .game-area.go { background: #27ae60; }
+        .game-area.foul { background: #d35400; }
 
-        #join-box { background: #181820; border: 1px solid rgba(255,255,255,0.08); padding: 32px 24px; border-radius: 20px; width: 100%; max-width: 400px; }
-        #join-box h2 { font-size: 1.6rem; color: #f39c12; margin-bottom: 20px; }
-        #pname { width: 100%; background: #09090c; border: 2px solid #2a2a35; color: white; font-size: 1.1rem; padding: 14px; border-radius: 12px; text-align: center; outline: none; margin-bottom: 20px; }
-        .join-btn { width: 100%; font-size: 1.1rem; font-weight: 700; padding: 14px; background: linear-gradient(135deg, #f39c12, #e67e22); color: white; border: none; border-radius: 12px; cursor: pointer; }
-        
-        #game-box { width: 100%; max-width: 500px; display: flex; flex-direction: column; align-items: center; gap: 15px; }
-        #player-info { font-size: 1.1rem; color: #f39c12; background: #1a1a24; padding: 8px 16px; border-radius: 20px; display: flex; align-items: center; gap: 10px; }
-        .leave-btn { background: #333; color: #aaa; border: 1px solid #555; padding: 4px 10px; font-size: 0.85rem; border-radius: 12px; cursor: pointer; }
-        
-        #msg { font-size: 1.5rem; font-weight: 700; min-height: 2em; margin-top: 5px; }
-        
-        .buzz-btn { width: 100%; height: 48vh; font-size: 3rem; font-weight: 900; color: white; border: none; border-radius: 24px; cursor: pointer; touch-action: manipulation; }
-        .buzz-btn.warning { background: linear-gradient(145deg, #e67e22, #d35400); }
-        .buzz-btn:disabled { background: #22222b; color: #555; cursor: not-allowed; border: 1px solid #333; }
+        .status-title { font-size: 2.5rem; font-weight: bold; margin-bottom: 10px; }
+        .status-sub { font-size: 1.2rem; opacity: 0.8; }
+        .player-info { position: absolute; top: 15px; left: 15px; font-size: 1rem; opacity: 0.7; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 </head>
 <body>
 
-    <div id="toast-banner"></div>
-
-    <div id="join-box">
-        <h2>กรอกชื่อเพื่อเข้าเล่น</h2>
-        <input type="text" id="pname" placeholder="ใส่ชื่อของคุณที่นี่..." maxlength="15" autocomplete="off">
-        <button class="join-btn" onclick="join()">ตกลง</button>
+    <!-- หน้ากรอกชื่อ -->
+    <div id="login-screen" class="login-card">
+        <h2 style="margin-bottom: 20px; color: #f39c12;">🏎️ เข้าร่วมแข่งขัน</h2>
+        <input type="text" id="player-name-input" placeholder="ใส่ชื่อของคุณ..." maxlength="15">
+        <button onclick="joinGame()">เข้าร่วมเกม</button>
     </div>
 
-    <div id="game-box" style="display:none;">
-        <div id="player-info">
-            👤 ผู้เล่น: <strong id="display-name"></strong>
-            <button class="leave-btn" onclick="changeSelfName()">✏️ เปลี่ยนชื่อ</button>
-        </div>
-        <h2 id="msg">รอ Host เริ่มไฟ...</h2>
-        <button id="btn" class="buzz-btn" onclick="press()" disabled>PRESS!</button>
+    <!-- หน้าเกมหลัก -->
+    <div id="game-screen" class="game-area waiting" onclick="handleTap()">
+        <div class="player-info">ผู้เล่น: <span id="display-name"></span></div>
+        <div id="status-title" class="status-title">รอ Host เริ่มเกม...</div>
+        <div id="status-sub" class="status-sub">เมื่อเริ่ม กดทันทีที่ไฟแดงดับทั้งหมด!</div>
     </div>
 
     <script>
@@ -60,184 +47,146 @@
         const db = firebase.database();
 
         let myName = '';
-        let hasPressed = false;
-        let isLateJoiner = false;
         let serverOffset = 0;
-        let currentGameState = null;
-        let playerRef = null;
-        let wakeLock = null;
-        let isUpdatingName = false;
-
-        function showToast(text, duration = 2500) {
-            const toast = document.getElementById('toast-banner');
-            toast.innerText = text;
-            toast.style.display = 'block';
-            toast.style.opacity = '1';
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                setTimeout(() => { toast.style.display = 'none'; }, 300);
-            }, duration);
-        }
-
-        async function requestWakeLock() {
-            try {
-                if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
-            } catch (err) {}
-        }
-
-        function releaseWakeLock() {
-            if (wakeLock !== null) { wakeLock.release(); wakeLock = null; }
-        }
+        let gameState = {};
+        let myStatus = 'WAITING';
+        let isJoined = false;
 
         db.ref('.info/serverTimeOffset').on('value', snap => { serverOffset = snap.val() || 0; });
 
-        function join() {
-            myName = document.getElementById('pname').value.trim();
-            if (myName) {
-                document.getElementById('display-name').innerText = myName;
-                document.getElementById('join-box').style.display = 'none';
-                document.getElementById('game-box').style.display = 'flex';
-                
-                requestWakeLock();
-                playerRef = db.ref('players/' + myName);
+        function joinGame() {
+            const input = document.getElementById('player-name-input');
+            const name = input.value.trim();
 
-                db.ref('gameState').once('value', snap => {
-                    const st = snap.val();
-                    if (st && (st.state === 'STARTING' || st.state === 'MANUAL_GO')) {
-                        isLateJoiner = true;
-                        playerRef.set({ name: myName, status: 'LOCKED', time: 0 });
-                    } else {
-                        isLateJoiner = false;
-                        playerRef.set({ name: myName, status: 'WAITING', time: 0 });
-                    }
-                });
-
-                playerRef.onDisconnect().remove();
-                listenPlayerEvents();
-                listenState();
-            }
-        }
-
-        function changeSelfName() {
-            const newName = prompt("ใส่ชื่อใหม่ของคุณ:", myName);
-            if (newName && newName.trim() !== "" && newName.trim() !== myName) {
-                const cleanName = newName.trim();
-                isUpdatingName = true;
-                
-                db.ref('players/' + myName).once('value', snap => {
-                    const data = snap.val() || { status: 'WAITING', time: 0 };
-                    data.name = cleanName;
-                    
-                    db.ref('players/' + myName).remove().then(() => {
-                        myName = cleanName;
-                        playerRef = db.ref('players/' + myName);
-                        playerRef.set(data).then(() => {
-                            playerRef.onDisconnect().remove();
-                            document.getElementById('display-name').innerText = myName;
-                            showToast("✏️ แก้ไขข้อมูลชื่อเรียบร้อย");
-                            listenPlayerEvents();
-                            setTimeout(() => { isUpdatingName = false; }, 500);
-                        });
-                    });
-                });
-            }
-        }
-
-        function listenPlayerEvents() {
-            playerRef.on('value', snapshot => {
-                if (isUpdatingName) return;
-
-                if (!snapshot.exists()) {
-                    if (document.getElementById('game-box').style.display !== 'none') {
-                        showToast("🚫 คุณถูก Host เชิญออกจากห้อง");
-                        setTimeout(() => {
-                            releaseWakeLock();
-                            playerRef = null;
-                            document.getElementById('game-box').style.display = 'none';
-                            document.getElementById('join-box').style.display = 'block';
-                        }, 1500);
-                    }
-                } else {
-                    const data = snapshot.val();
-                    if (data.name !== myName) {
-                        isUpdatingName = true;
-                        showToast(`✏️ Host เปลี่ยนชื่อให้คุณเป็น: ${data.name}`);
-                        myName = data.name;
-                        document.getElementById('display-name').innerText = myName;
-                        
-                        const oldRef = playerRef;
-                        playerRef = db.ref('players/' + myName);
-                        oldRef.off();
-                        playerRef.onDisconnect().remove();
-                        listenPlayerEvents();
-                        setTimeout(() => { isUpdatingName = false; }, 500);
-                    }
-                }
-            });
-        }
-
-        function press() {
-            const btn = document.getElementById('btn');
-            if (hasPressed || !playerRef || btn.disabled || !currentGameState || isLateJoiner) return;
-            
-            const pressTime = Date.now() + serverOffset;
-            hasPressed = true;
-            btn.disabled = true;
-            btn.className = 'buzz-btn';
-
-            if (currentGameState.mode === 'MANUAL') {
-                if (currentGameState.state === 'MANUAL_GO' && currentGameState.goTime > 0) {
-                    let reactionTime = pressTime - currentGameState.goTime;
-                    if (reactionTime > 0) {
-                        document.getElementById('msg').innerText = `👍 เวลาของคุณ: ${reactionTime} ms`;
-                        playerRef.update({ status: 'OK', time: reactionTime });
-                    } else {
-                        document.getElementById('msg').innerText = '❌ JUMP START (ฟาวล์!)';
-                        playerRef.update({ status: 'JUMP_START', time: 0 });
-                    }
-                } else {
-                    document.getElementById('msg').innerText = '❌ JUMP START (ฟาวล์!)';
-                    playerRef.update({ status: 'JUMP_START', time: 0 });
-                }
+            if (!name) {
+                alert("กรุณากรอกชื่อก่อนเข้าเล่น");
                 return;
             }
 
-            let targetGoTime = currentGameState.goTime;
-            let reactionTime = pressTime - targetGoTime;
+            const now = Date.now() + serverOffset;
 
-            if (pressTime < targetGoTime) {
-                document.getElementById('msg').innerText = '❌ JUMP START (ฟาวล์!)';
-                playerRef.update({ status: 'JUMP_START', time: 0 });
-            } else {
-                document.getElementById('msg').innerText = `👍 เวลาของคุณ: ${reactionTime} ms`;
-                playerRef.update({ status: 'OK', time: reactionTime });
+            // ตรวจสอบสถานะการโดนเตะ
+            db.ref(`kickedPlayers/${name}`).once('value', snapshot => {
+                const kickData = snapshot.val();
+
+                if (kickData && kickData.kickedAt) {
+                    const timePassed = now - kickData.kickedAt;
+                    const cooldownTime = 10000; // 10 วินาที
+
+                    if (timePassed < cooldownTime) {
+                        const remainingSec = Math.ceil((cooldownTime - timePassed) / 1000);
+                        alert(`🚫 คุณถูกเตะออกจากห้อง! กรุณารออีก ${remainingSec} วินาที ก่อนเข้าใหม่อีกครั้ง`);
+                        return;
+                    } else {
+                        db.ref(`kickedPlayers/${name}`).remove();
+                    }
+                }
+
+                myName = name;
+                document.getElementById('display-name').innerText = myName;
+
+                db.ref(`players/${myName}`).set({
+                    name: myName,
+                    status: 'WAITING',
+                    time: 0,
+                    joinedAt: now
+                }).then(() => {
+                    isJoined = true;
+                    document.getElementById('login-screen').style.display = 'none';
+                    document.getElementById('game-screen').style.display = 'flex';
+                    listenToGame();
+                    listenToSelf();
+                });
+            });
+        }
+
+        function listenToGame() {
+            db.ref('gameState').on('value', snap => {
+                gameState = snap.val() || {};
+                updateUI();
+            });
+        }
+
+        function listenToSelf() {
+            db.ref(`players/${myName}`).on('value', snap => {
+                if (!snap.exists() && isJoined) {
+                    alert("คุณถูกเตะออกจากห้อง!");
+                    location.reload();
+                    return;
+                }
+                const p = snap.val();
+                if (p) myStatus = p.status;
+            });
+        }
+
+        function updateUI() {
+            const screen = document.getElementById('game-screen');
+            const title = document.getElementById('status-title');
+            const sub = document.getElementById('status-sub');
+
+            if (myStatus === 'OK') return; 
+            if (myStatus === 'JUMP_START') {
+                screen.className = 'game-area foul';
+                title.innerText = '🔴 JUMP START!';
+                sub.innerText = 'กดก่อนไฟดับ (ฟาวล์)';
+                return;
+            }
+
+            const state = gameState.state || 'WAITING';
+
+            if (state === 'WAITING') {
+                screen.className = 'game-area waiting';
+                title.innerText = 'รอ Host เริ่มเกม...';
+                sub.innerText = 'เตรียมพร้อมไว้นะ!';
+            } else if (state === 'STARTING' || state === 'MANUAL_GO') {
+                screen.className = 'game-area ready';
+                title.innerText = 'READY...';
+                sub.innerText = 'กดเมื่อไฟดับหมด!';
             }
         }
 
-        function listenState() {
-            db.ref('gameState').on('value', snapshot => {
-                const data = snapshot.val();
-                if (!data) return;
+        function handleTap() {
+            if (!isJoined || myStatus === 'OK' || myStatus === 'JUMP_START') return;
 
-                currentGameState = data;
-                const btn = document.getElementById('btn');
+            const tapTime = Date.now() + serverOffset;
+            const state = gameState.state;
+            const screen = document.getElementById('game-screen');
+            const title = document.getElementById('status-title');
+            const sub = document.getElementById('status-sub');
 
-                if (data.state === 'WAITING') {
-                    hasPressed = false;
-                    isLateJoiner = false;
-                    btn.disabled = true;
-                    btn.className = 'buzz-btn';
-                    document.getElementById('msg').innerText = 'รอ Host เริ่มไฟ...';
-                } else if (isLateJoiner) {
-                    btn.disabled = true;
-                    btn.className = 'buzz-btn';
-                    document.getElementById('msg').innerText = '🔒 เกมเริ่มแล้ว (รอรอบถัดไป)';
-                } else if (!hasPressed) {
-                    btn.disabled = false;
-                    btn.className = 'buzz-btn warning';
-                    document.getElementById('msg').innerText = 'เตรียมพร้อม... (กดเมื่อไฟดับ!)';
-                }
-            });
+            if (state === 'WAITING') return;
+
+            let actualGoTime = 0;
+            if (state === 'STARTING' && gameState.mode === 'AUTO') {
+                actualGoTime = gameState.goTime;
+            } else if (state === 'MANUAL_GO') {
+                actualGoTime = gameState.goTime;
+            }
+
+            if (actualGoTime > 0 && tapTime >= actualGoTime) {
+                // กดได้ถูกต้อง
+                const reactionTime = tapTime - actualGoTime;
+                myStatus = 'OK';
+                screen.className = 'game-area go';
+                title.innerText = `${reactionTime} ms`;
+                sub.innerText = 'ยอดเยี่ยม!';
+
+                db.ref(`players/${myName}`).update({
+                    status: 'OK',
+                    time: reactionTime
+                });
+            } else {
+                // กดก่อนไฟดับ (ฟาวล์)
+                myStatus = 'JUMP_START';
+                screen.className = 'game-area foul';
+                title.innerText = '🔴 JUMP START!';
+                sub.innerText = 'กดก่อนไฟดับ (ฟาวล์)';
+
+                db.ref(`players/${myName}`).update({
+                    status: 'JUMP_START',
+                    time: 0
+                });
+            }
         }
     </script>
 </body>
