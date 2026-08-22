@@ -158,11 +158,15 @@
                 const minMs = Math.max(0, minSec * 1000);
                 const maxMs = Math.max(minMs, maxSec * 1000);
                 
-                // บวก buffer 100ms เพื่อให้เห็นไฟดวงที่ 5 ติดแน่ๆ ก่อนดับ
-                const randomDelay = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs + 100;
-                targetGoTime = sequenceStartTime + 4000 + randomDelay;
+                // สุ่มค่าเวลาตามปกติ (เพื่อนำไปแสดงผลตรงๆ)
+                const rawRandomDelay = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
                 
-                document.getElementById('delay-display').innerText = `⏱️ สุ่มเวลาดับไฟได้: ${(randomDelay / 1000).toFixed(2)} วินาที`;
+                // บวก buffer delay 100ms เพิ่มในการทำงานจริงหลังบ้าน เพื่อให้แสดงผลไฟดวงที่ 5 ทัน
+                const actualDelayMs = rawRandomDelay + 100;
+                targetGoTime = sequenceStartTime + 4000 + actualDelayMs;
+                
+                // แสดงผลเวลาที่สุ่มได้บนหน้า Host ตรงตามจริง (ถ้าสุ่มได้ 0 ก็จะแจ้งเตือนว่า 0.00 วินาที)
+                document.getElementById('delay-display').innerText = `⏱️ สุ่มเวลาดับไฟได้: ${(rawRandomDelay / 1000).toFixed(2)} วินาที`;
             } else {
                 document.getElementById('delay-display').innerText = '';
             }
@@ -180,7 +184,6 @@
                 const manualGoBtn = document.getElementById('manual-go-btn');
                 manualGoBtn.disabled = true;
                 
-                // สดให้กดได้หลังไฟดวงที่ 5 ติดขึ้นแล้ว + 100ms
                 const delayUntilFifthLight = Math.max(0, (sequenceStartTime + 4100) - now);
                 manualUnlockTimer = setTimeout(() => {
                     if (isGameRunning) manualGoBtn.disabled = false;
