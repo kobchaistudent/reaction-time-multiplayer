@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Host Control</title>
+    <title>Host Controller</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: #0f0f13; color: white; font-family: sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
@@ -18,6 +18,11 @@
         .btn-start { background: #2ecc71; color: white; }
         .btn-go { background: #e74c3c; color: white; }
         .btn-reset { background: #e67e22; color: white; }
+        
+        .config-group { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; background: #111116; padding: 12px; border-radius: 10px; }
+        .config-group input { width: 70px; padding: 8px; border-radius: 6px; border: 1px solid #444; background: #222; color: #fff; text-align: center; font-size: 1rem; }
+        .toggle-box { display: flex; justify-content: space-between; align-items: center; background: #111116; padding: 12px; border-radius: 10px; margin-bottom: 15px; }
+        
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #2a2a35; }
         th { color: #f39c12; }
@@ -25,6 +30,7 @@
         .btn-kick { background: #e74c3c; color: white; }
         .btn-edit { background: #3498db; color: white; }
         .hint { color: #e74c3c; font-size: 0.9rem; margin-top: 5px; display: none; }
+        .delay-info { color: #2ecc71; font-weight: bold; font-size: 1.1rem; margin-top: 5px; text-align: center; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -32,6 +38,14 @@
 <body>
 
     <h1>🏎️ Host Controller</h1>
+
+    <div class="card">
+        <h3>🌐 ระบบสิทธิ์ All In One</h3>
+        <div class="toggle-box">
+            <span>อนุญาตให้ใช้งานหน้า All In One</span>
+            <input type="checkbox" id="aio-toggle" onchange="toggleAIO(this.checked)" style="width:20px; height:20px; cursor:pointer;">
+        </div>
+    </div>
 
     <div class="card">
         <h3>📺 โหมดหน้าจอใหญ่ (Screen View)</h3>
@@ -42,10 +56,16 @@
     </div>
 
     <div class="card">
-        <h3>เลือกโหมดเกม</h3>
+        <h3>เลือกโหมดและตั้งเวลาดับไฟ</h3>
         <div class="selector-group">
             <button id="mode-auto" class="select-btn active" onclick="setMode('AUTO')">⚡ อัตโนมัติ (สุ่มไฟดับ)</button>
             <button id="mode-manual" class="select-btn" onclick="setMode('MANUAL')">🕹️ แมนนวล (Host กดดับไฟเอง)</button>
+        </div>
+
+        <div class="config-group" id="auto-config">
+            <label>ขอบเขตสุ่มเวลาดับไฟหลังติดครบ 5 ดวง (วินาที):</label>
+            <input type="number" id="min-delay" value="1" min="0" step="0.5"> ถึง
+            <input type="number" id="max-delay" value="4" min="0" step="0.5"> วินาที
         </div>
         
         <button id="start-btn" class="btn-ctrl btn-start" onclick="startSequence()">🚦 เริ่มเปิดไฟ (START)</button>
@@ -53,6 +73,8 @@
         
         <button id="manual-go-btn" class="btn-ctrl btn-go" style="display:none;" onclick="triggerManualGo()" disabled>🔥 ดับไฟแดงทั้งหมด (LIGHTS OUT!)</button>
         <button class="btn-ctrl btn-reset" onclick="resetGame()">🔄 รีเซ็ตเกมทั้งหมด</button>
+        
+        <div id="delay-display" class="delay-info"></div>
     </div>
 
     <div class="card">
@@ -86,6 +108,14 @@
             serverOffset = snap.val() || 0;
         });
 
+        db.ref('gameState/aioEnabled').on('value', snap => {
+            document.getElementById('aio-toggle').checked = snap.val() === true;
+        });
+
+        function toggleAIO(enabled) {
+            db.ref('gameState/aioEnabled').set(enabled);
+        }
+
         function checkControlState() {
             const startBtn = document.getElementById('start-btn');
             const hint = document.getElementById('screen-hint');
@@ -113,6 +143,7 @@
             document.getElementById('mode-auto').className = 'select-btn ' + (mode === 'AUTO' ? 'active' : '');
             document.getElementById('mode-manual').className = 'select-btn ' + (mode === 'MANUAL' ? 'active' : '');
             document.getElementById('manual-go-btn').style.display = (mode === 'MANUAL') ? 'block' : 'none';
+            document.getElementById('auto-config').style.display = (mode === 'AUTO') ? 'flex' : 'none';
             document.getElementById('manual-go-btn').disabled = true;
             db.ref('gameState/mode').set(mode);
         }
@@ -129,8 +160,17 @@
             let targetGoTime = 0;
 
             if (currentMode === 'AUTO') {
-                const randomDelay = Math.floor(Math.random() * 3300) + 1200;
-                targetGoTime = sequenceStartTime + 5000 + randomDelay;
+                const minSec = parseFloat(document.getElementById('min-delay').value) || 0;
+                const maxSec = parseFloat(document.getElementById('max-delay').value) || 0;
+                const minMs = Math.max(0, minSec * 1000);
+                const maxMs = Math.max(minMs, maxSec * 1000);
+                
+                const randomDelay = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+                targetGoTime = sequenceStartTime + 4000 + randomDelay;
+                
+                document.getElementById('delay-display').innerText = `⏱️ สุ่มเวลาดับไฟได้: ${(randomDelay / 1000).toFixed(2)} วินาที`;
+            } else {
+                document.getElementById('delay-display').innerText = '';
             }
 
             db.ref('gameState').set({
@@ -138,7 +178,8 @@
                 startTime: sequenceStartTime,
                 goTime: targetGoTime,
                 mode: currentMode,
-                screenView: 'LIGHTS'
+                screenView: 'LIGHTS',
+                aioEnabled: document.getElementById('aio-toggle').checked
             });
 
             if (currentMode === 'MANUAL') {
@@ -168,6 +209,7 @@
             
             isGameRunning = false;
             isResetDone = true;
+            document.getElementById('delay-display').innerText = '';
             
             const manualBtn = document.getElementById('manual-go-btn');
             manualBtn.style.display = (currentMode === 'MANUAL') ? 'block' : 'none';
@@ -177,7 +219,8 @@
                 state: 'WAITING', 
                 mode: currentMode, 
                 screenView: currentScreen,
-                resetAt: Date.now() + serverOffset
+                resetAt: Date.now() + serverOffset,
+                aioEnabled: document.getElementById('aio-toggle').checked
             });
             
             db.ref('players').once('value', snapshot => {
@@ -224,6 +267,32 @@
         function editPlayer(oldName) {
             const newName = prompt("ใส่ชื่อใหม่สำหรับผู้เล่นนี้:", oldName);
             if (newName && newName.trim() !== "" && newName !== oldName) {
+                const cleanName = newName.trim();
+                db.ref(`players/${oldName}`).once('value', snapshot => {
+                    const data = snapshot.val() || {};
+                    data.name = cleanName;
+                    
+                    // ป้องกันการเด้งออกจากห้อง โดยอัปเดตข้อมูลเก่าให้รู้ตัวก่อนเปลี่ยน Node
+                    db.ref(`players/${oldName}`).update({ name: cleanName }).then(() => {
+                        db.ref(`players/${cleanName}`).set(data).then(() => {
+                            db.ref(`players/${oldName}`).remove();
+                        });
+                    });
+                });
+            }
+        }
+
+        function kickPlayer(name) {
+            if (confirm(`คุณต้องการเตะผู้เล่น "${name}" ออกจากห้องใช่หรือไม่?`)) {
+                db.ref(`players/${name}`).remove();
+            }
+        }
+
+        checkControlState();
+    </script>
+</body>
+</html>
+Name !== oldName) {
                 const cleanName = newName.trim();
                 db.ref(`players/${oldName}`).once('value', snapshot => {
                     const data = snapshot.val();
