@@ -64,8 +64,8 @@
 
         <div class="config-group" id="auto-config">
             <label>ขอบเขตสุ่มเวลาดับไฟหลังติดครบ 5 ดวง (วินาที):</label>
-            <input type="number" id="min-delay" value="1" min="0" step="0.5"> ถึง
-            <input type="number" id="max-delay" value="4" min="0" step="0.5"> วินาที
+            <input type="number" id="min-delay" value="0" min="0" step="0.5"> ถึง
+            <input type="number" id="max-delay" value="3" min="0" step="0.5"> วินาที
         </div>
         
         <button id="start-btn" class="btn-ctrl btn-start" onclick="startSequence()">🚦 เริ่มเปิดไฟ (START)</button>
@@ -104,28 +104,21 @@
         let serverOffset = 0;
         let manualUnlockTimer = null;
 
-        db.ref('.info/serverTimeOffset').on('value', snap => {
-            serverOffset = snap.val() || 0;
-        });
+        db.ref('.info/serverTimeOffset').on('value', snap => { serverOffset = snap.val() || 0; });
 
         db.ref('gameState/aioEnabled').on('value', snap => {
             document.getElementById('aio-toggle').checked = snap.val() === true;
         });
 
-        function toggleAIO(enabled) {
-            db.ref('gameState/aioEnabled').set(enabled);
-        }
+        function toggleAIO(enabled) { db.ref('gameState/aioEnabled').set(enabled); }
 
         function checkControlState() {
             const startBtn = document.getElementById('start-btn');
             const hint = document.getElementById('screen-hint');
-            
             if (currentScreen === 'LIGHTS' && isResetDone && !isGameRunning) {
-                startBtn.disabled = false;
-                hint.style.display = 'none';
+                startBtn.disabled = false; hint.style.display = 'none';
             } else {
-                startBtn.disabled = true;
-                hint.style.display = 'block';
+                startBtn.disabled = true; hint.style.display = 'block';
             }
         }
 
@@ -165,7 +158,8 @@
                 const minMs = Math.max(0, minSec * 1000);
                 const maxMs = Math.max(minMs, maxSec * 1000);
                 
-                const randomDelay = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+                // บวก buffer 100ms เพื่อให้เห็นไฟดวงที่ 5 ติดแน่ๆ ก่อนดับ
+                const randomDelay = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs + 100;
                 targetGoTime = sequenceStartTime + 4000 + randomDelay;
                 
                 document.getElementById('delay-display').innerText = `⏱️ สุ่มเวลาดับไฟได้: ${(randomDelay / 1000).toFixed(2)} วินาที`;
@@ -186,11 +180,10 @@
                 const manualGoBtn = document.getElementById('manual-go-btn');
                 manualGoBtn.disabled = true;
                 
-                const delayUntilFifthLight = Math.max(0, (sequenceStartTime + 4000) - now);
+                // สดให้กดได้หลังไฟดวงที่ 5 ติดขึ้นแล้ว + 100ms
+                const delayUntilFifthLight = Math.max(0, (sequenceStartTime + 4100) - now);
                 manualUnlockTimer = setTimeout(() => {
-                    if (isGameRunning) {
-                        manualGoBtn.disabled = false;
-                    }
+                    if (isGameRunning) manualGoBtn.disabled = false;
                 }, delayUntilFifthLight);
             }
         }
@@ -206,7 +199,6 @@
 
         function resetGame() {
             if (manualUnlockTimer) clearTimeout(manualUnlockTimer);
-            
             isGameRunning = false;
             isResetDone = true;
             document.getElementById('delay-display').innerText = '';
@@ -266,39 +258,16 @@
 
         function editPlayer(oldName) {
             const newName = prompt("ใส่ชื่อใหม่สำหรับผู้เล่นนี้:", oldName);
-            if (newName && newName.trim() !== "" && newName !== oldName) {
+            if (newName && newName.trim() !== "" && newName.trim() !== oldName) {
                 const cleanName = newName.trim();
                 db.ref(`players/${oldName}`).once('value', snapshot => {
                     const data = snapshot.val() || {};
                     data.name = cleanName;
-                    
-                    // ป้องกันการเด้งออกจากห้อง โดยอัปเดตข้อมูลเก่าให้รู้ตัวก่อนเปลี่ยน Node
                     db.ref(`players/${oldName}`).update({ name: cleanName }).then(() => {
                         db.ref(`players/${cleanName}`).set(data).then(() => {
                             db.ref(`players/${oldName}`).remove();
                         });
                     });
-                });
-            }
-        }
-
-        function kickPlayer(name) {
-            if (confirm(`คุณต้องการเตะผู้เล่น "${name}" ออกจากห้องใช่หรือไม่?`)) {
-                db.ref(`players/${name}`).remove();
-            }
-        }
-
-        checkControlState();
-    </script>
-</body>
-</html>
-Name !== oldName) {
-                const cleanName = newName.trim();
-                db.ref(`players/${oldName}`).once('value', snapshot => {
-                    const data = snapshot.val();
-                    data.name = cleanName;
-                    db.ref(`players/${cleanName}`).set(data);
-                    db.ref(`players/${oldName}`).remove();
                 });
             }
         }
