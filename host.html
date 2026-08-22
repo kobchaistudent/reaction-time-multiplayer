@@ -158,14 +158,10 @@
                 const minMs = Math.max(0, minSec * 1000);
                 const maxMs = Math.max(minMs, maxSec * 1000);
                 
-                // สุ่มค่าเวลาตามปกติ (เพื่อนำไปแสดงผลตรงๆ)
                 const rawRandomDelay = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
-                
-                // บวก buffer delay 100ms เพิ่มในการทำงานจริงหลังบ้าน เพื่อให้แสดงผลไฟดวงที่ 5 ทัน
                 const actualDelayMs = rawRandomDelay + 100;
                 targetGoTime = sequenceStartTime + 4000 + actualDelayMs;
                 
-                // แสดงผลเวลาที่สุ่มได้บนหน้า Host ตรงตามจริง (ถ้าสุ่มได้ 0 ก็จะแจ้งเตือนว่า 0.00 วินาที)
                 document.getElementById('delay-display').innerText = `⏱️ สุ่มเวลาดับไฟได้: ${(rawRandomDelay / 1000).toFixed(2)} วินาที`;
             } else {
                 document.getElementById('delay-display').innerText = '';
@@ -277,7 +273,12 @@
 
         function kickPlayer(name) {
             if (confirm(`คุณต้องการเตะผู้เล่น "${name}" ออกจากห้องใช่หรือไม่?`)) {
-                db.ref(`players/${name}`).remove();
+                const now = Date.now() + serverOffset;
+                db.ref(`kickedPlayers/${name}`).set({
+                    kickedAt: now
+                }).then(() => {
+                    db.ref(`players/${name}`).remove();
+                });
             }
         }
 
