@@ -18,11 +18,11 @@
         .btn-start { background: #2ecc71; color: white; }
         .btn-go { background: #e74c3c; color: white; }
         .btn-reset { background: #e67e22; color: white; }
-        
-        .config-group { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; background: #111116; padding: 12px; border-radius: 10px; }
+
+        .config-group { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; background: #111116; padding: 12px; border-radius: 10px; flex-wrap: wrap; }
         .config-group input { width: 70px; padding: 8px; border-radius: 6px; border: 1px solid #444; background: #222; color: #fff; text-align: center; font-size: 1rem; }
         .toggle-box { display: flex; justify-content: space-between; align-items: center; background: #111116; padding: 12px; border-radius: 10px; margin-bottom: 15px; }
-        
+
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #2a2a35; }
         th { color: #f39c12; }
@@ -31,9 +31,12 @@
         .btn-edit { background: #3498db; color: white; }
         .hint { color: #e74c3c; font-size: 0.9rem; margin-top: 5px; display: none; }
         .delay-info { color: #2ecc71; font-weight: bold; font-size: 1.1rem; margin-top: 5px; text-align: center; }
+        .offline-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #666; margin-left: 6px; }
+        .offline-dot.online { background: #2ecc71; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="shared.js"></script>
 </head>
 <body>
 
@@ -67,13 +70,13 @@
             <input type="number" id="min-delay" value="0" min="0" step="0.5"> ถึง
             <input type="number" id="max-delay" value="3" min="0" step="0.5"> วินาที
         </div>
-        
+
         <button id="start-btn" class="btn-ctrl btn-start" onclick="startSequence()">🚦 เริ่มเปิดไฟ (START)</button>
         <p id="screen-hint" class="hint">⚠️ ต้องเปลี่ยนเป็น "หน้าสัญญาณไฟ" และ "รีเซ็ตเกม" ก่อนจึงจะเริ่มได้</p>
-        
+
         <button id="manual-go-btn" class="btn-ctrl btn-go" style="display:none;" onclick="triggerManualGo()" disabled>🔥 ดับไฟแดงทั้งหมด (LIGHTS OUT!)</button>
         <button class="btn-ctrl btn-reset" onclick="resetGame()">🔄 รีเซ็ตเกมทั้งหมด</button>
-        
+
         <div id="delay-display" class="delay-info"></div>
     </div>
 
@@ -93,9 +96,7 @@
     </div>
 
     <script>
-        const FIREBASE_URL = "https://reaction-time-multiplayer-default-rtdb.asia-southeast1.firebasedatabase.app/";
-        firebase.initializeApp({ databaseURL: FIREBASE_URL });
-        const db = firebase.database();
+        const db = initFirebase();
 
         let currentMode = 'AUTO';
         let currentScreen = 'LIGHTS';
@@ -149,7 +150,7 @@
             checkControlState();
 
             const now = Date.now() + serverOffset;
-            const sequenceStartTime = now + 400; 
+            const sequenceStartTime = now + 400;
             let targetGoTime = 0;
 
             if (currentMode === 'AUTO') {
@@ -157,11 +158,11 @@
                 const maxSec = parseFloat(document.getElementById('max-delay').value) || 0;
                 const minMs = Math.max(0, minSec * 1000);
                 const maxMs = Math.max(minMs, maxSec * 1000);
-                
+
                 const rawRandomDelay = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
                 const actualDelayMs = rawRandomDelay + 100;
                 targetGoTime = sequenceStartTime + 4000 + actualDelayMs;
-                
+
                 document.getElementById('delay-display').innerText = `⏱️ สุ่มเวลาดับไฟได้: ${(rawRandomDelay / 1000).toFixed(2)} วินาที`;
             } else {
                 document.getElementById('delay-display').innerText = '';
@@ -174,12 +175,17 @@
                 mode: currentMode,
                 screenView: 'LIGHTS',
                 aioEnabled: document.getElementById('aio-toggle').checked
+            }).catch(() => {
+                alert('เริ่มเกมไม่สำเร็จ กรุณาเช็คอินเทอร์เน็ตแล้วลองใหม่');
+                isGameRunning = false;
+                isResetDone = true;
+                checkControlState();
             });
 
             if (currentMode === 'MANUAL') {
                 const manualGoBtn = document.getElementById('manual-go-btn');
                 manualGoBtn.disabled = true;
-                
+
                 const delayUntilFifthLight = Math.max(0, (sequenceStartTime + 4100) - now);
                 manualUnlockTimer = setTimeout(() => {
                     if (isGameRunning) manualGoBtn.disabled = false;
@@ -197,23 +203,25 @@
         }
 
         function resetGame() {
+            if (!confirm('ยืนยันรีเซ็ตเกมทั้งหมด? สถานะและเวลาของผู้เล่นทุกคนในรอบนี้จะถูกล้าง')) return;
+
             if (manualUnlockTimer) clearTimeout(manualUnlockTimer);
             isGameRunning = false;
             isResetDone = true;
             document.getElementById('delay-display').innerText = '';
-            
+
             const manualBtn = document.getElementById('manual-go-btn');
             manualBtn.style.display = (currentMode === 'MANUAL') ? 'block' : 'none';
             manualBtn.disabled = true;
-            
-            db.ref('gameState').set({ 
-                state: 'WAITING', 
-                mode: currentMode, 
+
+            db.ref('gameState').set({
+                state: 'WAITING',
+                mode: currentMode,
                 screenView: currentScreen,
                 resetAt: Date.now() + serverOffset,
                 aioEnabled: document.getElementById('aio-toggle').checked
             });
-            
+
             db.ref('players').once('value', snapshot => {
                 const players = snapshot.val();
                 for (let key in players) {
@@ -233,51 +241,68 @@
             for (let key in players) {
                 count++;
                 const p = players[key];
-                const tr = document.createElement('tr');
-                
-                let statusText = p.status;
+
+                let statusText = '⚪ รอ...';
                 if (p.status === 'OK') statusText = '🟢 สำเร็จ';
                 else if (p.status === 'JUMP_START') statusText = '🔴 JUMP START (ฟาวล์)';
                 else if (p.status === 'LOCKED') statusText = '🔒 มาไม่ทันรอบนี้';
-                else statusText = '⚪ รอ...';
 
-                tr.innerHTML = `
-                    <td><strong>${p.name}</strong></td>
-                    <td>${statusText}</td>
-                    <td>${p.time > 0 ? p.time + ' ms' : '-'}</td>
-                    <td>
-                        <button class="action-btn btn-edit" onclick="editPlayer('${key}')">✏️ เปลี่ยนชื่อ</button>
-                        <button class="action-btn btn-kick" onclick="kickPlayer('${key}')">🚫 เตะ</button>
-                    </td>
-                `;
+                // สร้าง element ด้วย textContent แทน innerHTML string เพื่อกัน XSS จากชื่อผู้เล่น
+                const tr = document.createElement('tr');
+
+                const nameTd = document.createElement('td');
+                const nameStrong = document.createElement('strong');
+                nameStrong.textContent = p.name || '(ไม่มีชื่อ)';
+                nameTd.appendChild(nameStrong);
+                const dot = document.createElement('span');
+                dot.className = 'offline-dot' + (p.connected !== false ? ' online' : '');
+                dot.title = (p.connected !== false) ? 'ออนไลน์' : 'ขาดการเชื่อมต่อ';
+                nameTd.appendChild(dot);
+
+                const statusTd = document.createElement('td');
+                statusTd.textContent = statusText;
+
+                const timeTd = document.createElement('td');
+                timeTd.textContent = p.time > 0 ? p.time + ' ms' : '-';
+
+                const actionTd = document.createElement('td');
+                const editBtn = document.createElement('button');
+                editBtn.className = 'action-btn btn-edit';
+                editBtn.textContent = '✏️ เปลี่ยนชื่อ';
+                editBtn.onclick = () => editPlayer(key, p.name);
+                const kickBtn = document.createElement('button');
+                kickBtn.className = 'action-btn btn-kick';
+                kickBtn.textContent = '🚫 เตะ';
+                kickBtn.onclick = () => kickPlayer(key, p.name);
+                actionTd.appendChild(editBtn);
+                actionTd.appendChild(kickBtn);
+
+                tr.appendChild(nameTd);
+                tr.appendChild(statusTd);
+                tr.appendChild(timeTd);
+                tr.appendChild(actionTd);
                 tbody.appendChild(tr);
             }
             document.getElementById('player-count').innerText = count;
         });
 
-        function editPlayer(oldName) {
+        function editPlayer(playerId, oldName) {
             const newName = prompt("ใส่ชื่อใหม่สำหรับผู้เล่นนี้:", oldName);
             if (newName && newName.trim() !== "" && newName.trim() !== oldName) {
-                const cleanName = newName.trim();
-                db.ref(`players/${oldName}`).once('value', snapshot => {
-                    const data = snapshot.val() || {};
-                    data.name = cleanName;
-                    db.ref(`players/${oldName}`).update({ name: cleanName }).then(() => {
-                        db.ref(`players/${cleanName}`).set(data).then(() => {
-                            db.ref(`players/${oldName}`).remove();
-                        });
-                    });
-                });
+                // แก้ที่ record เดิมตรงๆ เพราะ key คือ playerId ที่ไม่เปลี่ยน — ไม่ต้องลบ/สร้างใหม่
+                // เดิมของบั๊กนี้คือ: ลบ key เดิมทิ้งแล้วสร้างใหม่ ทำให้ฝั่งผู้เล่นเข้าใจผิดว่าถูกเตะออก
+                db.ref(`players/${playerId}`).update({ name: newName.trim() });
             }
         }
 
-        function kickPlayer(name) {
+        function kickPlayer(playerId, name) {
             if (confirm(`คุณต้องการเตะผู้เล่น "${name}" ออกจากห้องใช่หรือไม่?`)) {
                 const now = Date.now() + serverOffset;
-                db.ref(`kickedPlayers/${name}`).set({
-                    kickedAt: now
+                db.ref(`kickedPlayers/${playerId}`).set({
+                    kickedAt: now,
+                    name: name
                 }).then(() => {
-                    db.ref(`players/${name}`).remove();
+                    db.ref(`players/${playerId}`).remove();
                 });
             }
         }
