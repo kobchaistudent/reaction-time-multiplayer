@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html>
-<head> 
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>แผงควบคุมเกม (Control Panel)</title>
@@ -460,7 +460,10 @@
         function editPlayer(playerId, oldName) {
             const newName = prompt("ใส่ชื่อใหม่สำหรับผู้เล่นนี้:", oldName);
             if (newName && newName.trim() !== "" && newName.trim() !== oldName) {
-                db.ref(`players/${playerId}`).update({ name: newName.trim() });
+                const cleanName = newName.trim();
+                db.ref(`players/${playerId}`).update({ name: cleanName })
+                    .then(() => showToast(`เปลี่ยนชื่อเป็น "${cleanName}" แล้ว`, 'success'))
+                    .catch(() => showToast('เปลี่ยนชื่อไม่สำเร็จ กรุณาลองใหม่ (เช็คอินเทอร์เน็ต)', 'error'));
             }
         }
 
