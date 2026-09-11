@@ -219,6 +219,14 @@
                 const p = snap.val();
                 if (p) {
                     myStatus = p.status;
+
+                    // แก้บั๊ก: เดิมไม่เคย sync ชื่อกลับมา ทำให้ host เปลี่ยนชื่อแล้วจอผู้เล่นไม่อัปเดต
+                    if (p.name && p.name !== myName) {
+                        myName = p.name;
+                        document.getElementById('display-name').innerText = myName;
+                        localStorage.setItem('rt_player_name', myName);
+                    }
+
                     updateUI();
                 }
             });
