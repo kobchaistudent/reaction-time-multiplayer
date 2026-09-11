@@ -3,44 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Host Controller</title>
+    <title>แผงควบคุมเกม (Control Panel)</title>
+    <link rel="stylesheet" href="shared.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #0f0f13; color: white; font-family: sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
-        h1 { color: #f39c12; margin-bottom: 20px; text-align: center; }
-        .card { background: #181820; border-radius: 16px; padding: 20px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.08); }
-        .selector-group { display: flex; gap: 10px; margin-top: 10px; margin-bottom: 15px; }
-        .select-btn { flex: 1; padding: 12px; background: #22222b; color: #888; border: 2px solid #333; border-radius: 10px; cursor: pointer; font-weight: bold; }
-        .select-btn.active { background: #f39c12; color: black; border-color: #f39c12; }
-        .select-btn.screen-active { background: #3498db; color: white; border-color: #3498db; }
+        body { background: var(--color-bg); color: var(--color-text); padding: 20px; max-width: 800px; margin: 0 auto; }
+        h1 { color: var(--color-primary); margin-bottom: 20px; text-align: center; }
+        h3 { margin-bottom: 6px; }
+        .card { background: var(--color-panel); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 20px; border: 1px solid var(--color-border); }
+        .selector-group { display: flex; gap: 10px; margin-top: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        .select-btn { flex: 1; min-width: 100px; padding: 12px; background: #22222b; color: #888; border: 2px solid #333; border-radius: 10px; cursor: pointer; font-weight: bold; }
+        .select-btn.active { background: var(--color-primary); color: black; border-color: var(--color-primary); }
+        .select-btn.screen-active { background: var(--color-blue); color: white; border-color: var(--color-blue); }
         .btn-ctrl { width: 100%; padding: 15px; font-size: 1.2rem; font-weight: bold; border-radius: 12px; border: none; cursor: pointer; margin-bottom: 10px; }
         .btn-ctrl:disabled { opacity: 0.3; cursor: not-allowed; }
-        .btn-start { background: #2ecc71; color: white; }
-        .btn-go { background: #e74c3c; color: white; }
-        .btn-reset { background: #e67e22; color: white; }
+        .btn-start { background: var(--color-success); color: white; }
+        .btn-go { background: var(--color-danger); color: white; }
+        .btn-reset { background: var(--color-warning); color: white; }
+        .btn-secondary { background: #22222b; color: #fff; border: 1px solid #333; }
 
-        .config-group { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; background: #111116; padding: 12px; border-radius: 10px; flex-wrap: wrap; }
+        .config-group { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; background: var(--color-panel-alt); padding: 12px; border-radius: 10px; flex-wrap: wrap; }
         .config-group input { width: 70px; padding: 8px; border-radius: 6px; border: 1px solid #444; background: #222; color: #fff; text-align: center; font-size: 1rem; }
-        .toggle-box { display: flex; justify-content: space-between; align-items: center; background: #111116; padding: 12px; border-radius: 10px; margin-bottom: 15px; }
+        .toggle-box { display: flex; justify-content: space-between; align-items: center; background: var(--color-panel-alt); padding: 12px; border-radius: 10px; margin-bottom: 15px; }
+        .toggle-box + .toggle-box { margin-top: -5px; }
 
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #2a2a35; }
-        th { color: #f39c12; }
+        th { color: var(--color-primary); }
         .action-btn { padding: 5px 10px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.85rem; margin-right: 5px; }
-        .btn-kick { background: #e74c3c; color: white; }
-        .btn-edit { background: #3498db; color: white; }
-        .hint { color: #e74c3c; font-size: 0.9rem; margin-top: 5px; display: none; }
-        .delay-info { color: #2ecc71; font-weight: bold; font-size: 1.1rem; margin-top: 5px; text-align: center; }
+        .btn-kick { background: var(--color-danger); color: white; }
+        .btn-edit { background: var(--color-blue); color: white; }
+        .hint { color: var(--color-danger); font-size: 0.9rem; margin-top: 5px; display: none; }
+        .delay-info { color: var(--color-success); font-weight: bold; font-size: 1.1rem; margin-top: 5px; text-align: center; }
         .offline-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #666; margin-left: 6px; }
-        .offline-dot.online { background: #2ecc71; }
+        .offline-dot.online { background: var(--color-success); }
+
+        .qr-row { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+        #host-qr { background: #fff; padding: 10px; border-radius: 10px; width: fit-content; }
+        .qr-link-box { flex: 1; min-width: 200px; }
+        .qr-link-box input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; font-size: 0.85rem; margin-bottom: 8px; }
+
+        .export-row { display: flex; gap: 10px; }
+        .export-row button { flex: 1; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="shared.js"></script>
 </head>
 <body>
 
-    <h1>🏎️ Host Controller</h1>
+    <h1>🎛️ แผงควบคุมเกม (Control Panel)</h1>
+
+    <div class="card">
+        <h3>🔗 ลิงก์เข้าร่วมเกม</h3>
+        <div class="qr-row">
+            <div id="host-qr"></div>
+            <div class="qr-link-box">
+                <input type="text" id="join-url-box" readonly>
+                <button class="btn-ctrl btn-secondary" style="margin-bottom:0;" onclick="copyJoinUrl()">📋 คัดลอกลิงก์</button>
+            </div>
+        </div>
+    </div>
 
     <div class="card">
         <h3>🌐 ระบบสิทธิ์ All In One</h3>
@@ -54,21 +78,51 @@
         <h3>📺 โหมดหน้าจอใหญ่ (Screen View)</h3>
         <div class="selector-group">
             <button id="view-lights" class="select-btn screen-active" onclick="setScreenView('LIGHTS')">🚦 หน้าสัญญาณไฟ</button>
-            <button id="view-board" class="select-btn" onclick="setScreenView('LEADERBOARD')">🏆 หน้า Leaderboard</button>
+            <button id="view-board" class="select-btn" onclick="setScreenView('LEADERBOARD')">🏆 Leaderboard</button>
+            <button id="view-qr" class="select-btn" onclick="setScreenView('QR')">📱 หน้า QR Code</button>
         </div>
+        <div class="toggle-box">
+            <span>แสดง QR Code ซ้อนทับมุมจอ (ระหว่างหน้าไฟ/Leaderboard)</span>
+            <input type="checkbox" id="qr-overlay-toggle" onchange="toggleQrOverlay(this.checked)" style="width:20px; height:20px; cursor:pointer;">
+        </div>
+        <div class="toggle-box">
+            <span>จำนวนผู้เล่นบนจอใหญ่</span>
+            <span style="opacity:0.6; font-size:0.85rem;">แสดงอัตโนมัติเสมอ</span>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>🏆 รูปแบบการขึ้น Leaderboard</h3>
+        <div class="selector-group">
+            <button id="podium-animated" class="select-btn active" onclick="setPodiumMode('ANIMATED')">🎬 อนิเมชัน (3→2→1)</button>
+            <button id="podium-instant" class="select-btn" onclick="setPodiumMode('INSTANT')">⚡ ตารางทันที (ประหยัดเวลา)</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>📳 การสั่นมือถือผู้เล่น</h3>
+        <div class="toggle-box">
+            <span>อนุญาตให้สั่น (ผู้เล่นยังปิดเองได้เป็นรายคน)</span>
+            <input type="checkbox" id="vibration-toggle" checked onchange="toggleVibration(this.checked)" style="width:20px; height:20px; cursor:pointer;">
+        </div>
+        <p style="font-size:0.85rem; color:var(--color-text-dim);">ปิดตรงนี้ = ปิดการสั่นของทุกคนพร้อมกัน เพื่อความเท่าเทียม</p>
     </div>
 
     <div class="card">
         <h3>เลือกโหมดและตั้งเวลาดับไฟ</h3>
         <div class="selector-group">
             <button id="mode-auto" class="select-btn active" onclick="setMode('AUTO')">⚡ อัตโนมัติ (สุ่มไฟดับ)</button>
-            <button id="mode-manual" class="select-btn" onclick="setMode('MANUAL')">🕹️ แมนนวล (Host กดดับไฟเอง)</button>
+            <button id="mode-manual" class="select-btn" onclick="setMode('MANUAL')">🕹️ แมนนวล (กดดับไฟเอง)</button>
         </div>
 
         <div class="config-group" id="auto-config">
             <label>ขอบเขตสุ่มเวลาดับไฟหลังติดครบ 5 ดวง (วินาที):</label>
             <input type="number" id="min-delay" value="0" min="0" step="0.5"> ถึง
             <input type="number" id="max-delay" value="3" min="0" step="0.5"> วินาที
+        </div>
+
+        <div class="progress-bar-wrap" id="progress-bar" style="display:none;">
+            <div class="progress-seg"></div><div class="progress-seg"></div><div class="progress-seg"></div><div class="progress-seg"></div><div class="progress-seg"></div>
         </div>
 
         <button id="start-btn" class="btn-ctrl btn-start" onclick="startSequence()">🚦 เริ่มเปิดไฟ (START)</button>
@@ -81,7 +135,22 @@
     </div>
 
     <div class="card">
+        <h3>📊 สรุปผลรอบนี้</h3>
+        <div class="stat-card-row">
+            <div class="stat-card"><div class="stat-value" id="stat-fastest">-</div><div class="stat-label">เร็วที่สุด (ms)</div></div>
+            <div class="stat-card"><div class="stat-value" id="stat-average">-</div><div class="stat-label">เฉลี่ย (ms)</div></div>
+            <div class="stat-card"><div class="stat-value" id="stat-fouls">0</div><div class="stat-label">คนฟาวล์</div></div>
+        </div>
+        <div class="export-row">
+            <button class="btn-ctrl btn-secondary" onclick="copyResults()">📋 คัดลอกผลลัพธ์</button>
+            <button class="btn-ctrl btn-secondary" onclick="downloadResultsCsv()">⬇️ ดาวน์โหลด CSV</button>
+        </div>
+    </div>
+
+    <div class="card">
         <h3>ผู้เล่นทั้งหมดในห้อง (<span id="player-count">0</span>)</h3>
+        <input type="text" id="player-search" class="search-input" placeholder="🔍 ค้นหาชื่อผู้เล่น..." oninput="renderPlayerTable()">
+        <button class="btn-ctrl btn-secondary" onclick="kickAllOffline()">🧹 เตะผู้เล่นออฟไลน์ทั้งหมด</button>
         <table>
             <thead>
                 <tr>
@@ -100,18 +169,65 @@
 
         let currentMode = 'AUTO';
         let currentScreen = 'LIGHTS';
+        let currentPodiumMode = 'ANIMATED';
+        let currentVibrationEnabled = true;
+        let currentQrOverlay = false;
         let isGameRunning = false;
         let isResetDone = true;
         let serverOffset = 0;
         let manualUnlockTimer = null;
+        let latestPlayers = {};
+        let progressAnimFrame = null;
 
-        db.ref('.info/serverTimeOffset').on('value', snap => { serverOffset = snap.val() || 0; });
+        showLoadingOverlay('กำลังเชื่อมต่อ...');
+        let firstLoad = true;
+        db.ref('.info/serverTimeOffset').on('value', snap => {
+            serverOffset = snap.val() || 0;
+            if (firstLoad) { firstLoad = false; hideLoadingOverlay(); }
+        });
+        setTimeout(() => { if (firstLoad) { firstLoad = false; hideLoadingOverlay(); } }, 4000);
+
+        // === QR ลิงก์เข้าร่วม ===
+        document.getElementById('join-url-box').value = getJoinUrl();
+        renderQrCode('host-qr', 150);
+        function copyJoinUrl() {
+            navigator.clipboard.writeText(getJoinUrl())
+                .then(() => showToast('คัดลอกลิงก์แล้ว ✅', 'success'))
+                .catch(() => showToast('คัดลอกไม่สำเร็จ', 'error'));
+        }
 
         db.ref('gameState/aioEnabled').on('value', snap => {
             document.getElementById('aio-toggle').checked = snap.val() === true;
         });
-
         function toggleAIO(enabled) { db.ref('gameState/aioEnabled').set(enabled); }
+
+        db.ref('gameState/qrOverlayEnabled').on('value', snap => {
+            currentQrOverlay = snap.val() === true;
+            document.getElementById('qr-overlay-toggle').checked = currentQrOverlay;
+        });
+        function toggleQrOverlay(enabled) {
+            currentQrOverlay = enabled;
+            db.ref('gameState/qrOverlayEnabled').set(enabled);
+        }
+
+        db.ref('gameState/podiumMode').on('value', snap => {
+            currentPodiumMode = snap.val() || 'ANIMATED';
+            document.getElementById('podium-animated').className = 'select-btn ' + (currentPodiumMode === 'ANIMATED' ? 'active' : '');
+            document.getElementById('podium-instant').className = 'select-btn ' + (currentPodiumMode === 'INSTANT' ? 'active' : '');
+        });
+        function setPodiumMode(mode) {
+            currentPodiumMode = mode;
+            db.ref('gameState/podiumMode').set(mode);
+        }
+
+        db.ref('gameState/vibrationEnabled').on('value', snap => {
+            currentVibrationEnabled = snap.val() !== false; // ค่าเริ่มต้น = true
+            document.getElementById('vibration-toggle').checked = currentVibrationEnabled;
+        });
+        function toggleVibration(enabled) {
+            currentVibrationEnabled = enabled;
+            db.ref('gameState/vibrationEnabled').set(enabled);
+        }
 
         function checkControlState() {
             const startBtn = document.getElementById('start-btn');
@@ -127,6 +243,7 @@
             currentScreen = viewMode;
             document.getElementById('view-lights').className = 'select-btn ' + (viewMode === 'LIGHTS' ? 'screen-active' : '');
             document.getElementById('view-board').className = 'select-btn ' + (viewMode === 'LEADERBOARD' ? 'screen-active' : '');
+            document.getElementById('view-qr').className = 'select-btn ' + (viewMode === 'QR' ? 'screen-active' : '');
             db.ref('gameState/screenView').set(viewMode);
             checkControlState();
         }
@@ -174,9 +291,14 @@
                 goTime: targetGoTime,
                 mode: currentMode,
                 screenView: 'LIGHTS',
-                aioEnabled: document.getElementById('aio-toggle').checked
+                aioEnabled: document.getElementById('aio-toggle').checked,
+                qrOverlayEnabled: currentQrOverlay,
+                podiumMode: currentPodiumMode,
+                vibrationEnabled: currentVibrationEnabled
+            }).then(() => {
+                startProgressBar(sequenceStartTime, currentMode, targetGoTime);
             }).catch(() => {
-                alert('เริ่มเกมไม่สำเร็จ กรุณาเช็คอินเทอร์เน็ตแล้วลองใหม่');
+                showToast('เริ่มเกมไม่สำเร็จ กรุณาเช็คอินเทอร์เน็ตแล้วลองใหม่', 'error');
                 isGameRunning = false;
                 isResetDone = true;
                 checkControlState();
@@ -185,12 +307,37 @@
             if (currentMode === 'MANUAL') {
                 const manualGoBtn = document.getElementById('manual-go-btn');
                 manualGoBtn.disabled = true;
-
                 const delayUntilFifthLight = Math.max(0, (sequenceStartTime + 4100) - now);
                 manualUnlockTimer = setTimeout(() => {
                     if (isGameRunning) manualGoBtn.disabled = false;
                 }, delayUntilFifthLight);
             }
+        }
+
+        // === Progress bar 5 ช่อง ระหว่าง STARTING ให้ host เห็นไฟติดกี่ดวงโดยไม่ต้องมองจอใหญ่ ===
+        function startProgressBar(startTime, mode, goTime) {
+            const wrap = document.getElementById('progress-bar');
+            const segs = wrap.querySelectorAll('.progress-seg');
+            wrap.style.display = 'flex';
+            segs.forEach(s => s.classList.remove('lit'));
+
+            if (progressAnimFrame) cancelAnimationFrame(progressAnimFrame);
+            function tick() {
+                const now = Date.now() + serverOffset;
+                const elapsed = now - startTime;
+
+                if (mode === 'AUTO' && goTime > 0 && now >= goTime) {
+                    wrap.style.display = 'none';
+                    return;
+                }
+                if (!isGameRunning) { wrap.style.display = 'none'; return; }
+
+                let activeCount = Math.max(0, Math.min(5, Math.floor(elapsed / 1000) + (elapsed >= 0 ? 1 : 0)));
+                segs.forEach((s, i) => s.classList.toggle('lit', i < activeCount));
+
+                progressAnimFrame = requestAnimationFrame(tick);
+            }
+            tick();
         }
 
         function triggerManualGo() {
@@ -206,6 +353,9 @@
             if (!confirm('ยืนยันรีเซ็ตเกมทั้งหมด? สถานะและเวลาของผู้เล่นทุกคนในรอบนี้จะถูกล้าง')) return;
 
             if (manualUnlockTimer) clearTimeout(manualUnlockTimer);
+            if (progressAnimFrame) cancelAnimationFrame(progressAnimFrame);
+            document.getElementById('progress-bar').style.display = 'none';
+
             isGameRunning = false;
             isResetDone = true;
             document.getElementById('delay-display').innerText = '';
@@ -219,7 +369,10 @@
                 mode: currentMode,
                 screenView: currentScreen,
                 resetAt: Date.now() + serverOffset,
-                aioEnabled: document.getElementById('aio-toggle').checked
+                aioEnabled: document.getElementById('aio-toggle').checked,
+                qrOverlayEnabled: currentQrOverlay,
+                podiumMode: currentPodiumMode,
+                vibrationEnabled: currentVibrationEnabled
             });
 
             db.ref('players').once('value', snapshot => {
@@ -230,24 +383,32 @@
             });
 
             checkControlState();
+            showToast('รีเซ็ตเกมแล้ว', 'success');
         }
 
+        // === รายชื่อผู้เล่น + ค้นหา + สถิติ ===
         db.ref('players').on('value', snapshot => {
+            latestPlayers = snapshot.val() || {};
+            renderPlayerTable();
+            renderStats();
+        });
+
+        function renderPlayerTable() {
             const tbody = document.getElementById('player-list');
             tbody.innerHTML = '';
-            const players = snapshot.val() || {};
+            const search = document.getElementById('player-search').value.trim().toLowerCase();
             let count = 0;
 
-            for (let key in players) {
+            for (let key in latestPlayers) {
+                const p = latestPlayers[key];
+                if (search && !(p.name || '').toLowerCase().includes(search)) continue;
                 count++;
-                const p = players[key];
 
                 let statusText = '⚪ รอ...';
                 if (p.status === 'OK') statusText = '🟢 สำเร็จ';
                 else if (p.status === 'JUMP_START') statusText = '🔴 JUMP START (ฟาวล์)';
                 else if (p.status === 'LOCKED') statusText = '🔒 มาไม่ทันรอบนี้';
 
-                // สร้าง element ด้วย textContent แทน innerHTML string เพื่อกัน XSS จากชื่อผู้เล่น
                 const tr = document.createElement('tr');
 
                 const nameTd = document.createElement('td');
@@ -283,14 +444,22 @@
                 tr.appendChild(actionTd);
                 tbody.appendChild(tr);
             }
-            document.getElementById('player-count').innerText = count;
-        });
+            document.getElementById('player-count').innerText = Object.keys(latestPlayers).length;
+        }
+
+        function renderStats() {
+            const list = Object.values(latestPlayers);
+            const okList = list.filter(p => p.status === 'OK');
+            const foulCount = list.filter(p => p.status === 'JUMP_START').length;
+
+            document.getElementById('stat-fastest').textContent = okList.length ? Math.min(...okList.map(p => p.time)) : '-';
+            document.getElementById('stat-average').textContent = okList.length ? Math.round(okList.reduce((a, p) => a + p.time, 0) / okList.length) : '-';
+            document.getElementById('stat-fouls').textContent = foulCount;
+        }
 
         function editPlayer(playerId, oldName) {
             const newName = prompt("ใส่ชื่อใหม่สำหรับผู้เล่นนี้:", oldName);
             if (newName && newName.trim() !== "" && newName.trim() !== oldName) {
-                // แก้ที่ record เดิมตรงๆ เพราะ key คือ playerId ที่ไม่เปลี่ยน — ไม่ต้องลบ/สร้างใหม่
-                // เดิมของบั๊กนี้คือ: ลบ key เดิมทิ้งแล้วสร้างใหม่ ทำให้ฝั่งผู้เล่นเข้าใจผิดว่าถูกเตะออก
                 db.ref(`players/${playerId}`).update({ name: newName.trim() });
             }
         }
@@ -298,13 +467,57 @@
         function kickPlayer(playerId, name) {
             if (confirm(`คุณต้องการเตะผู้เล่น "${name}" ออกจากห้องใช่หรือไม่?`)) {
                 const now = Date.now() + serverOffset;
-                db.ref(`kickedPlayers/${playerId}`).set({
-                    kickedAt: now,
-                    name: name
-                }).then(() => {
-                    db.ref(`players/${playerId}`).remove();
-                });
+                db.ref(`kickedPlayers/${playerId}`).set({ kickedAt: now, name: name })
+                    .then(() => db.ref(`players/${playerId}`).remove())
+                    .then(() => showToast(`เตะ "${name}" ออกจากห้องแล้ว`, 'success'));
             }
+        }
+
+        function kickAllOffline() {
+            const offlineEntries = Object.entries(latestPlayers).filter(([, p]) => p.connected === false);
+            if (offlineEntries.length === 0) {
+                showToast('ไม่มีผู้เล่นที่ออฟไลน์อยู่ตอนนี้', 'info');
+                return;
+            }
+            if (!confirm(`ลบผู้เล่นที่ออฟไลน์ทั้งหมด ${offlineEntries.length} คนออกจากห้อง?`)) return;
+            offlineEntries.forEach(([key]) => db.ref(`players/${key}`).remove());
+            showToast(`ลบผู้เล่นออฟไลน์ ${offlineEntries.length} คนแล้ว`, 'success');
+        }
+
+        // === Export ผลลัพธ์ ===
+        function buildResultsList() {
+            return sortPlayersForLeaderboard(latestPlayers);
+        }
+        function buildResultsText() {
+            const list = buildResultsList();
+            return list.map((p, i) => {
+                const timeStr = p.status === 'OK' ? `${p.time} ms` : (p.status === 'JUMP_START' ? 'JUMP START' : 'ไม่สำเร็จ');
+                return `${p.status === 'OK' ? (i + 1) : '-'}. ${p.name}: ${timeStr}`;
+            }).join('\n');
+        }
+        function copyResults() {
+            const text = buildResultsText();
+            if (!text) { showToast('ยังไม่มีข้อมูลผู้เล่น', 'error'); return; }
+            navigator.clipboard.writeText(text)
+                .then(() => showToast('คัดลอกผลลัพธ์แล้ว ✅', 'success'))
+                .catch(() => showToast('คัดลอกไม่สำเร็จ', 'error'));
+        }
+        function downloadResultsCsv() {
+            const list = buildResultsList();
+            if (!list.length) { showToast('ยังไม่มีข้อมูลผู้เล่น', 'error'); return; }
+            let csv = 'อันดับ,ชื่อ,เวลา (ms),สถานะ\n';
+            list.forEach((p, i) => {
+                const rank = p.status === 'OK' ? (i + 1) : '-';
+                const time = p.status === 'OK' ? p.time : '';
+                csv += `${rank},"${(p.name || '').replace(/"/g, '""')}",${time},${p.status}\n`;
+            });
+            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `reaction-results-${Date.now()}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
         }
 
         checkControlState();
