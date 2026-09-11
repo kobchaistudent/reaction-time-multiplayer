@@ -1,0 +1,116 @@
+/* ============================================================
+   shared.css — ธีมสี ฟอนต์ และคอมโพเนนต์กลางที่ใช้ร่วมกันทุกหน้า
+   ต้องวางไฟล์นี้อยู่โฟลเดอร์เดียวกับไฟล์ .html ทั้งหมด
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+    --color-bg: #0f0f13;
+    --color-bg-deep: #050508;
+    --color-panel: #181820;
+    --color-panel-alt: #111116;
+    --color-border: rgba(255, 255, 255, 0.08);
+    --color-primary: #f39c12;
+    --color-blue: #3498db;
+    --color-success: #2ecc71;
+    --color-danger: #e74c3c;
+    --color-warning: #e67e22;
+    --color-text: #ffffff;
+    --color-text-dim: #8a8a95;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+}
+
+body, input, button, textarea, select {
+    font-family: 'Kanit', sans-serif;
+}
+
+/* ===== Toast / Snackbar (แทน alert() ของเบราว์เซอร์) ===== */
+#toast-container {
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+    z-index: 9999; display: flex; flex-direction: column; gap: 10px;
+    pointer-events: none; width: 90%; max-width: 420px; align-items: center;
+}
+.toast {
+    background: #22222b; color: #fff; padding: 14px 22px; border-radius: var(--radius-md);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); font-size: 0.95rem; font-weight: 500;
+    border-left: 4px solid var(--color-primary); opacity: 0; transform: translateY(-16px);
+    animation: toast-in 0.25s ease forwards; text-align: center; max-width: 100%;
+}
+.toast.success { border-left-color: var(--color-success); }
+.toast.error { border-left-color: var(--color-danger); }
+.toast.hide { animation: toast-out 0.2s ease forwards; }
+@keyframes toast-in { to { opacity: 1; transform: translateY(0); } }
+@keyframes toast-out { to { opacity: 0; transform: translateY(-12px); } }
+
+/* ===== Loading overlay ===== */
+.loading-overlay {
+    position: fixed; inset: 0; background: var(--color-bg-deep);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; z-index: 9998; color: var(--color-text-dim); font-size: 0.95rem;
+}
+.spinner {
+    width: 44px; height: 44px; border: 4px solid #2a2a35; border-top-color: var(--color-primary);
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== Leaderboard row / podium reveal animation ===== */
+@keyframes row-in { from { opacity: 0; transform: translateX(-18px); } to { opacity: 1; transform: translateX(0); } }
+.row-animate { animation: row-in 0.35s ease forwards; opacity: 0; }
+
+@keyframes podium-in { to { opacity: 1; transform: translateY(0) scale(1); } }
+.podium-block { opacity: 0; transform: translateY(40px) scale(0.85); animation: podium-in 0.5s cubic-bezier(.34,1.56,.64,1) forwards; }
+
+.podium-wrap { display: flex; align-items: flex-end; justify-content: center; gap: 18px; margin-bottom: 25px; flex-wrap: wrap; }
+.podium-medal { font-size: 2.2rem; margin-bottom: 6px; }
+.podium-name { font-size: 1.1rem; font-weight: 700; margin-bottom: 4px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.podium-time { font-family: monospace; font-size: 1rem; opacity: 0.85; margin-bottom: 10px; }
+.podium-bar { width: 110px; border-radius: 10px 10px 0 0; display: flex; align-items: flex-start; justify-content: center; padding-top: 8px; font-size: 1.8rem; font-weight: 900; color: rgba(0,0,0,0.55); }
+.podium-rank-1 .podium-bar { height: 140px; background: linear-gradient(180deg, #f1c40f, #d4ac0d); order: 2; }
+.podium-rank-2 .podium-bar { height: 100px; background: linear-gradient(180deg, #bdc3c7, #95a5a6); order: 1; }
+.podium-rank-3 .podium-bar { height: 70px; background: linear-gradient(180deg, #e67e22, #d35400); order: 3; }
+.podium-rank-1 { order: 2; }
+.podium-rank-2 { order: 1; }
+.podium-rank-3 { order: 3; }
+
+@keyframes light-pop { 0% { transform: scale(0.85); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
+.light.red { animation: light-pop 0.25s ease; }
+
+/* ===== ป้ายลอย: จำนวนผู้เล่น / ปุ่ม fullscreen / QR มุมจอ ===== */
+.player-count-badge {
+    position: fixed; top: 20px; left: 20px; background: rgba(24, 24, 32, 0.85);
+    padding: 10px 18px; border-radius: var(--radius-md); font-weight: 600; font-size: 1.1rem;
+    border: 1px solid var(--color-border); z-index: 40;
+}
+
+.fullscreen-btn {
+    position: fixed; bottom: 20px; left: 20px; width: 46px; height: 46px; border-radius: 50%;
+    background: rgba(24, 24, 32, 0.85); border: 1px solid var(--color-border); color: #fff;
+    font-size: 1.2rem; cursor: pointer; z-index: 40; display: flex; align-items: center; justify-content: center;
+}
+
+.qr-overlay-corner {
+    position: fixed; bottom: 20px; right: 20px; background: #fff; padding: 10px;
+    border-radius: var(--radius-md); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5); text-align: center;
+    z-index: 40;
+}
+.qr-overlay-corner small { display: block; color: #111; margin-top: 4px; font-weight: 600; font-size: 0.75rem; }
+
+/* ===== การ์ดสถิติ / progress bar / ค้นหา (ใช้ในหน้า Control Panel) ===== */
+.stat-card-row { display: flex; gap: 12px; margin-bottom: 15px; flex-wrap: wrap; }
+.stat-card { flex: 1; min-width: 110px; background: var(--color-panel-alt); border-radius: var(--radius-md); padding: 14px; text-align: center; }
+.stat-card .stat-value { font-size: 1.5rem; font-weight: 700; color: var(--color-primary); }
+.stat-card .stat-label { font-size: 0.8rem; color: var(--color-text-dim); margin-top: 4px; }
+
+.progress-bar-wrap { display: flex; gap: 6px; margin: 10px 0; }
+.progress-seg { flex: 1; height: 10px; border-radius: 6px; background: #2a2a35; transition: background 0.2s; }
+.progress-seg.lit { background: var(--color-danger); }
+
+.search-input {
+    width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #444;
+    background: #222; color: #fff; font-size: 1rem; margin-bottom: 12px;
+}
