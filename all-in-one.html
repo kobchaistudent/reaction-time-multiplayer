@@ -114,6 +114,8 @@
         let isGameRunning = false;
         let latestPlayers = {};
         let lastScreenView = null;
+        let playersLoaded = false;
+        let pendingLeaderboardReveal = false;
         let firstGameStateLoad = true;
 
         showLoadingOverlay('กำลังเชื่อมต่อ...');
@@ -225,16 +227,26 @@
             document.getElementById('qr-view').style.display = (currentScreen === 'QR') ? 'flex' : 'none';
 
             if (currentScreen === 'LEADERBOARD' && lastScreenView !== 'LEADERBOARD') {
-                leaderboardController.reveal(latestPlayers, currentPodiumMode);
+                if (playersLoaded) {
+                    leaderboardController.reveal(latestPlayers, currentPodiumMode);
+                } else {
+                    // แก้บั๊ก race condition: ข้อมูลผู้เล่นยังมาไม่ถึง (เช่น เพิ่ง refresh จอกลางงานตรงหน้า leaderboard พอดี)
+                    pendingLeaderboardReveal = true;
+                }
             }
             lastScreenView = currentScreen;
         });
 
         db.ref('players').on('value', snapshot => {
             latestPlayers = snapshot.val() || {};
+            playersLoaded = true;
             document.getElementById('player-count-badge').textContent = `👥 ผู้เล่น: ${Object.keys(latestPlayers).length} คน`;
 
-            if (lastScreenView === 'LEADERBOARD') {
+            if (pendingLeaderboardReveal) {
+                pendingLeaderboardReveal = false;
+                leaderboardController.reveal(latestPlayers, currentPodiumMode);
+            } else if (lastScreenView === 'LEADERBOARD') {
+                // ถ้าอยู่หน้า leaderboard อยู่แล้ว แค่รีเฟรชตาราง+ชื่อบน podium ไม่เล่นอนิเมชันซ้ำ
                 leaderboardController.refreshTableOnly(latestPlayers);
             }
         });
