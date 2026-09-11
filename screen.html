@@ -95,6 +95,9 @@
         let latestPlayers = {};
         let lastScreenView = null;
         let firstGameStateLoad = true;
+        let playersLoaded = false;
+        let pendingLeaderboardReveal = false;
+        let currentPodiumMode = 'ANIMATED';
 
         showLoadingOverlay('กำลังเชื่อมต่อ...');
         setTimeout(() => { if (firstGameStateLoad) { firstGameStateLoad = false; hideLoadingOverlay(); } }, 5000);
@@ -144,19 +147,31 @@
             const qrOverlayOn = data.qrOverlayEnabled === true && viewMode !== 'QR';
             document.getElementById('qr-overlay').style.display = qrOverlayOn ? 'block' : 'none';
 
+            currentPodiumMode = data.podiumMode || 'ANIMATED';
+
             // เข้าสู่หน้า LEADERBOARD ใหม่ (transition) → เล่นอนิเมชัน podium ตาม podiumMode ที่ host ตั้งไว้
             if (viewMode === 'LEADERBOARD' && lastScreenView !== 'LEADERBOARD') {
-                leaderboardController.reveal(latestPlayers, data.podiumMode || 'ANIMATED');
+                if (playersLoaded) {
+                    leaderboardController.reveal(latestPlayers, currentPodiumMode);
+                } else {
+                    // แก้บั๊ก race condition: ข้อมูลผู้เล่นยังมาไม่ถึง (เช่น เพิ่ง refresh จอกลางงานตรงหน้า leaderboard พอดี)
+                    // รอให้ players/ มาถึงก่อนค่อย reveal แทนที่จะ reveal ด้วยข้อมูลว่างเปล่า
+                    pendingLeaderboardReveal = true;
+                }
             }
             lastScreenView = viewMode;
         });
 
         db.ref('players').on('value', snapshot => {
             latestPlayers = snapshot.val() || {};
+            playersLoaded = true;
             document.getElementById('player-count-badge').textContent = `👥 ผู้เล่น: ${Object.keys(latestPlayers).length} คน`;
 
-            // ถ้าอยู่หน้า leaderboard อยู่แล้ว แค่รีเฟรชตาราง ไม่เล่นอนิเมชัน podium ซ้ำทุกครั้งที่คะแนนขยับ
-            if (lastScreenView === 'LEADERBOARD') {
+            if (pendingLeaderboardReveal) {
+                pendingLeaderboardReveal = false;
+                leaderboardController.reveal(latestPlayers, currentPodiumMode);
+            } else if (lastScreenView === 'LEADERBOARD') {
+                // ถ้าอยู่หน้า leaderboard อยู่แล้ว แค่รีเฟรชตาราง+ชื่อบน podium ไม่เล่นอนิเมชัน podium ซ้ำทุกครั้งที่คะแนนขยับ
                 leaderboardController.refreshTableOnly(latestPlayers);
             }
         });
