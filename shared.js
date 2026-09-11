@@ -5,7 +5,7 @@
 
 const FIREBASE_URL = "https://reaction-time-multiplayer-default-rtdb.asia-southeast1.firebasedatabase.app/";
 
-/** เรียก firebase.initializeApp() แบบกันเรียกซ้ำ (กัน error ถ้ามีการ include สคริปต์ผิดจังหวะ) */
+/** เรียก firebase.initializeApp() แบบกันเรียกซ้ำ */
 function initFirebase() {
     if (!firebase.apps.length) {
         firebase.initializeApp({ databaseURL: FIREBASE_URL });
@@ -13,17 +13,14 @@ function initFirebase() {
     return firebase.database();
 }
 
-/** แปลงข้อความให้ปลอดภัยก่อนใส่ผ่าน innerHTML — กันคนตั้งชื่อเป็นโค้ด HTML/JS แล้วรันบนจอ host/จอใหญ่ */
+/** แปลงข้อความให้ปลอดภัยก่อนใส่ผ่าน innerHTML */
 function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = (str === null || str === undefined) ? '' : String(str);
     return div.innerHTML;
 }
 
-/**
- * รหัสประจำตัวผู้เล่น สุ่มครั้งเดียวแล้วเก็บถาวรใน localStorage ของเครื่อง/เบราว์เซอร์นั้น
- * ใช้แทนการใช้ "ชื่อ" เป็น Firebase key โดยตรง — แก้ปัญหาชื่อซ้ำทับกัน และเปลี่ยนชื่อแล้วโดนเตะออกเอง
- */
+/** รหัสประจำตัวผู้เล่น สุ่มครั้งเดียวแล้วเก็บถาวรใน localStorage ของเครื่องนั้น */
 function getOrCreatePlayerId() {
     let id = localStorage.getItem('rt_player_id');
     if (!id) {
@@ -33,16 +30,58 @@ function getOrCreatePlayerId() {
     return id;
 }
 
-/** ตัวช่วยเล่นเสียง beep พร้อมระบบ "ปลดล็อกเสียง" ที่ต้องมี user gesture ก่อน (เบราว์เซอร์บล็อก autoplay) */
+/* ============================================================
+   Toast / Snackbar — แทน alert() ของเบราว์เซอร์ที่ดูหลุดธีม
+   ============================================================ */
+function ensureToastContainer() {
+    let c = document.getElementById('toast-container');
+    if (!c) {
+        c = document.createElement('div');
+        c.id = 'toast-container';
+        document.body.appendChild(c);
+    }
+    return c;
+}
+function showToast(message, type = 'info', duration = 3200) {
+    const c = ensureToastContainer();
+    const t = document.createElement('div');
+    t.className = 'toast' + (type ? ' ' + type : '');
+    t.textContent = message;
+    c.appendChild(t);
+    setTimeout(() => {
+        t.classList.add('hide');
+        setTimeout(() => t.remove(), 220);
+    }, duration);
+}
+
+/* ============================================================
+   Loading overlay — กันช่วงว่างเปล่าตอนรอ Firebase เชื่อมต่อครั้งแรก
+   ============================================================ */
+function showLoadingOverlay(message) {
+    let el = document.getElementById('loading-overlay');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'loading-overlay';
+        el.className = 'loading-overlay';
+        el.innerHTML = '<div class="spinner"></div><div id="loading-message"></div>';
+        document.body.appendChild(el);
+    }
+    document.getElementById('loading-message').textContent = message || 'กำลังเชื่อมต่อ...';
+    el.style.display = 'flex';
+}
+function hideLoadingOverlay() {
+    const el = document.getElementById('loading-overlay');
+    if (el) el.style.display = 'none';
+}
+
+/* ============================================================
+   เสียง — พร้อมระบบปลดล็อกที่ต้องมี user gesture ก่อน
+   ============================================================ */
 function createBeeper() {
     let audioCtx = null;
     function ensureCtx() {
-        if (!audioCtx) {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        if (audioCtx.state === 'suspended') {
-            audioCtx.resume();
-        }
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
         return audioCtx;
     }
     return {
@@ -61,14 +100,49 @@ function createBeeper() {
                 gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + duration);
                 osc.stop(ctx.currentTime + duration);
             } catch (err) {
-                // เสียงเล่นไม่ได้ไม่ควรทำให้เกมพัง แค่เงียบไปเฉยๆ
                 console.warn('เล่นเสียงไม่สำเร็จ:', err);
             }
         }
     };
 }
 
-/** เรียงลำดับผู้เล่นสำหรับ leaderboard: OK เรียงตามเวลาน้อยไปมาก, ที่เหลือไปท้าย */
+/* ============================================================
+   การสั่น — ผู้เล่นปิดเองได้ (ไม่ชอบ) / host ปิดรวมได้ (ความเท่าเทียม)
+   ============================================================ */
+function tryVibrate(pattern, globalEnabled) {
+    if (globalEnabled === false) return; // host ปิดไว้เพื่อความเท่าเทียมของทุกคน
+    const pref = localStorage.getItem('rt_vibration_pref');
+    const personalOn = pref === null ? true : pref === 'true';
+    if (!personalOn) return;
+    if (navigator.vibrate) {
+        try { navigator.vibrate(pattern); } catch (e) { /* บางเบราว์เซอร์ไม่รองรับ ไม่ต้องทำอะไร */ }
+    }
+}
+function getVibrationPref() {
+    const pref = localStorage.getItem('rt_vibration_pref');
+    return pref === null ? true : pref === 'true';
+}
+function setVibrationPref(on) {
+    localStorage.setItem('rt_vibration_pref', on ? 'true' : 'false');
+}
+
+/* ============================================================
+   Label ความไวแบบสนุกๆ ตามเวลาที่ทำได้
+   ============================================================ */
+const SPEED_LABELS = [
+    { max: 200, emoji: '⚡', text: 'สายฟ้าแลบ!' },
+    { max: 300, emoji: '🔥', text: 'ยอดเยี่ยม!' },
+    { max: 450, emoji: '👍', text: 'ดีมาก!' },
+    { max: 650, emoji: '🙂', text: 'ใช้ได้เลย!' },
+    { max: Infinity, emoji: '🐢', text: 'ฝึกอีกนิดนะ' }
+];
+function getSpeedLabel(ms) {
+    return SPEED_LABELS.find(l => ms <= l.max);
+}
+
+/* ============================================================
+   ผู้เล่น: จัดเรียง / หาอันดับ
+   ============================================================ */
 function sortPlayersForLeaderboard(playersObj) {
     const list = Object.keys(playersObj || {}).map(id => Object.assign({ id }, playersObj[id]));
     list.sort((a, b) => {
@@ -79,11 +153,49 @@ function sortPlayersForLeaderboard(playersObj) {
     });
     return list;
 }
+function computeMyRank(playersObj, myId) {
+    const list = sortPlayersForLeaderboard(playersObj).filter(p => p.status === 'OK');
+    const idx = list.findIndex(p => p.id === myId);
+    return idx === -1 ? null : idx + 1;
+}
 
-/**
- * ตัวควบคุมแอนิเมชันไฟ 5 ดวง — ใช้ร่วมกันระหว่าง screen.html และ all-in-one.html
- * กันปัญหา requestAnimationFrame ค้าง/ซ้อนกันเวลา gameState อัปเดตถี่ๆ
- */
+/* ============================================================
+   QR Code — ลิงก์เข้าร่วมเกม (ต้องมีสคริปต์ qrcode.min.js ในหน้านั้นด้วย)
+   ============================================================ */
+function getJoinUrl() {
+    return new URL('index.html', window.location.href).href;
+}
+function renderQrCode(containerId, size = 180) {
+    const el = document.getElementById(containerId);
+    if (!el || typeof QRCode === 'undefined') return;
+    el.innerHTML = '';
+    new QRCode(el, { text: getJoinUrl(), width: size, height: size, colorDark: '#000000', colorLight: '#ffffff' });
+}
+
+/* ============================================================
+   Confetti ตอนประกาศผล (ต้องมีสคริปต์ canvas-confetti ในหน้านั้นด้วย)
+   ============================================================ */
+function fireConfettiSafe() {
+    if (typeof confetti === 'function') {
+        confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 } });
+        setTimeout(() => confetti({ particleCount: 70, spread: 110, origin: { y: 0.4 } }), 250);
+    }
+}
+
+/* ============================================================
+   Fullscreen API
+   ============================================================ */
+function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+        document.exitFullscreen().catch(() => {});
+    }
+}
+
+/* ============================================================
+   ตัวควบคุมแอนิเมชันไฟ 5 ดวง — ใช้ร่วมกันระหว่าง screen.html และ all-in-one.html
+   ============================================================ */
 function createLightSequencer(lights, beeper, getServerNow) {
     let currentLights = 0;
     let isGoPlayed = false;
@@ -93,14 +205,12 @@ function createLightSequencer(lights, beeper, getServerNow) {
         if (animFrame) cancelAnimationFrame(animFrame);
         animFrame = null;
     }
-
     function resetLights() {
         stop();
         currentLights = 0;
         isGoPlayed = false;
         lights.forEach(l => l.className = 'light');
     }
-
     function run(data) {
         stop();
         currentLights = 0;
@@ -108,26 +218,17 @@ function createLightSequencer(lights, beeper, getServerNow) {
 
         function tick() {
             const now = getServerNow();
-
             if (data.state === 'STARTING') {
                 const elapsed = now - data.startTime;
-
                 if (elapsed < 0) {
                     lights.forEach(l => l.className = 'light');
                 } else if (data.mode === 'AUTO' && data.goTime > 0 && now >= data.goTime) {
                     lights.forEach(l => l.className = 'light');
-                    if (!isGoPlayed) {
-                        beeper.play(880, 'sine', 0.3);
-                        isGoPlayed = true;
-                    }
+                    if (!isGoPlayed) { beeper.play(880, 'sine', 0.3); isGoPlayed = true; }
                 } else {
                     let activeCount = Math.min(5, Math.floor(elapsed / 1000) + 1);
                     if (activeCount < 1) activeCount = 1;
-
-                    lights.forEach((l, idx) => {
-                        l.className = idx < activeCount ? 'light red' : 'light';
-                    });
-
+                    lights.forEach((l, idx) => { l.className = idx < activeCount ? 'light red' : 'light'; });
                     if (activeCount > currentLights && activeCount <= 5) {
                         beeper.play(440, 'square', 0.15);
                         currentLights = activeCount;
@@ -135,16 +236,110 @@ function createLightSequencer(lights, beeper, getServerNow) {
                 }
             } else if (data.state === 'MANUAL_GO') {
                 lights.forEach(l => l.className = 'light');
-                if (!isGoPlayed) {
-                    beeper.play(880, 'sine', 0.3);
-                    isGoPlayed = true;
-                }
+                if (!isGoPlayed) { beeper.play(880, 'sine', 0.3); isGoPlayed = true; }
             }
-
             animFrame = requestAnimationFrame(tick);
         }
         tick();
     }
-
     return { run, resetLights, stop };
+}
+
+/* ============================================================
+   Leaderboard + Podium reveal (สไตล์ Kahoot: 3 → 2 → 1 แล้วค่อยขึ้นตารางที่เหลือ)
+   ใช้ร่วมกันระหว่าง screen.html และ all-in-one.html
+   ============================================================ */
+function createLeaderboardController({ podiumRowEl, tableBodyEl, beeper }) {
+
+    function medalFor(rank) {
+        return rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉';
+    }
+
+    function renderPodiumBlock(p, rank) {
+        const block = document.createElement('div');
+        block.className = 'podium-block podium-rank-' + rank;
+        const medal = document.createElement('div');
+        medal.className = 'podium-medal';
+        medal.textContent = medalFor(rank);
+        const name = document.createElement('div');
+        name.className = 'podium-name';
+        name.textContent = p.name || '(ไม่มีชื่อ)';
+        const time = document.createElement('div');
+        time.className = 'podium-time';
+        time.textContent = p.time + ' ms';
+        const bar = document.createElement('div');
+        bar.className = 'podium-bar podium-bar-' + rank;
+        bar.textContent = rank;
+        block.appendChild(medal); block.appendChild(name); block.appendChild(time); block.appendChild(bar);
+        podiumRowEl.appendChild(block);
+    }
+
+    function renderRestTable(list, startRank, animate) {
+        tableBodyEl.innerHTML = '';
+        list.forEach((p, i) => {
+            const rank = startRank + i;
+            const isFoul = p.status !== 'OK';
+            const tr = document.createElement('tr');
+            tr.className = 'leaderboard-row' + (isFoul ? ' foul' : '') + (animate ? ' row-animate' : '');
+            if (animate) tr.style.animationDelay = (i * 60) + 'ms';
+
+            const rankTd = document.createElement('td');
+            rankTd.className = 'rank';
+            rankTd.textContent = isFoul ? '-' : rank;
+
+            const nameTd = document.createElement('td');
+            nameTd.textContent = p.name || '(ไม่มีชื่อ)';
+
+            const timeTd = document.createElement('td');
+            timeTd.className = 'time-col';
+            let timeDisplay = 'WAITING...';
+            if (p.status === 'OK') timeDisplay = `${p.time} ms`;
+            else if (p.status === 'JUMP_START') timeDisplay = '❌ JUMP START';
+            timeTd.textContent = timeDisplay;
+
+            tr.appendChild(rankTd); tr.appendChild(nameTd); tr.appendChild(timeTd);
+            tableBodyEl.appendChild(tr);
+        });
+    }
+
+    /** เรียกครั้งเดียวตอนเปลี่ยนมาที่หน้า LEADERBOARD (ไม่ใช่ทุกครั้งที่ players/ อัปเดตขณะอยู่หน้านี้อยู่แล้ว) */
+    function reveal(playersObj, mode) {
+        const list = sortPlayersForLeaderboard(playersObj);
+        const top3 = list.filter(p => p.status === 'OK').slice(0, 3);
+        const top3Ids = new Set(top3.map(p => p.id));
+        const rest = list.filter(p => !top3Ids.has(p.id));
+        const restStartRank = top3.length + 1;
+
+        podiumRowEl.innerHTML = '';
+        tableBodyEl.innerHTML = '';
+
+        if (mode !== 'ANIMATED' || top3.length === 0) {
+            // โหมดตารางทันที — เพื่อความรวดเร็ว ไม่ต้องรอทีละคน
+            top3.forEach((p, i) => renderPodiumBlock(p, i + 1));
+            renderRestTable(rest, restStartRank, true);
+            if (top3.length) fireConfettiSafe();
+            return;
+        }
+
+        // โหมดอนิเมชันสไตล์ Kahoot: เผยอันดับ 3 → 2 → 1 ทีละคน แล้วค่อยโชว์ตารางที่เหลือ
+        const revealOrder = [3, 2, 1].filter(r => top3[r - 1]);
+        const startDelay = 250;
+        revealOrder.forEach((rank, seq) => {
+            setTimeout(() => {
+                renderPodiumBlock(top3[rank - 1], rank);
+                beeper.play(rank === 1 ? 880 : 600, 'sine', 0.25);
+                if (rank === 1) fireConfettiSafe();
+            }, startDelay + seq * 900);
+        });
+        setTimeout(() => renderRestTable(rest, restStartRank, true), startDelay + revealOrder.length * 900 + 400);
+    }
+
+    /** อัปเดตตารางเฉยๆ โดยไม่เล่นอนิเมชัน podium ใหม่ (ใช้ตอนคะแนนเปลี่ยนขณะอยู่หน้า leaderboard อยู่แล้ว) */
+    function refreshTableOnly(playersObj) {
+        const list = sortPlayersForLeaderboard(playersObj);
+        const shownTop3 = podiumRowEl.children.length;
+        renderRestTable(list.slice(shownTop3), shownTop3 + 1, false);
+    }
+
+    return { reveal, refreshTableOnly };
 }
