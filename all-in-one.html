@@ -3,32 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <title>All In One Screen</title>
+    <link rel="stylesheet" href="shared.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #050508; color: white; font-family: sans-serif; display: flex; flex-direction: column; justify-content: space-between; align-items: center; min-height: 100vh; padding: 20px; }
+        body { background: #050508; color: white; display: flex; flex-direction: column; justify-content: space-between; align-items: center; min-height: 100vh; padding: 20px; }
 
-        #disabled-screen { display: flex; justify-content: center; align-items: center; height: 100vh; font-size: 2rem; color: #e74c3c; font-weight: bold; }
+        #disabled-screen { display: flex; justify-content: center; align-items: center; height: 100vh; font-size: 2rem; color: #e74c3c; font-weight: bold; text-align: center; }
 
         #main-content { width: 100%; display: flex; flex-direction: column; align-items: center; flex: 1; justify-content: center; }
-        #lights-view { display: flex; justify-content: center; align-items: center; margin-bottom: 20px; }
+        #lights-view { display: none; justify-content: center; align-items: center; margin-bottom: 20px; }
         .light-board { display: flex; gap: 15px; background: #111; padding: 30px; border-radius: 20px; border: 3px solid #222; }
         .light-column { display: flex; flex-direction: column; gap: 15px; background: #000; padding: 12px; border-radius: 12px; }
         .light { width: 70px; height: 70px; border-radius: 50%; background: #222; }
         .light.red { background: #ff0000; box-shadow: 0 0 35px #ff0000; }
 
         #board-view { width: 100%; max-width: 800px; display: none; flex-direction: column; align-items: center; }
-        .board-title { font-size: 2.2rem; color: #f39c12; margin-bottom: 15px; }
+        .board-title { font-size: 2.2rem; color: var(--color-primary); margin-bottom: 15px; }
         .leaderboard-table { width: 100%; border-collapse: separate; border-spacing: 0 8px; }
         .leaderboard-table th { color: #888; padding: 8px 15px; text-align: left; }
         .leaderboard-row { background: #12121a; }
         .leaderboard-row td { padding: 12px 15px; font-size: 1.2rem; font-weight: bold; }
         .leaderboard-row.foul { color: #e74c3c; }
 
+        #qr-view { display: none; flex-direction: column; align-items: center; }
+        #screen-qr-code { background: #fff; padding: 20px; border-radius: 16px; }
+        #qr-view-url { margin-top: 14px; opacity: 0.7; font-size: 1rem; }
+
         .control-bar { width: 100%; max-width: 600px; display: flex; gap: 10px; margin-top: 20px; }
         .btn-aio { flex: 1; padding: 15px; border-radius: 12px; border: none; font-size: 1rem; font-weight: bold; cursor: pointer; color: white; }
-        .btn-auto-start { background: #2ecc71; }
-        .btn-toggle-view { background: #3498db; }
-        .btn-reset-game { background: #e67e22; }
+        .btn-auto-start { background: var(--color-success); }
+        .btn-toggle-view { background: var(--color-blue); }
+        .btn-reset-game { background: var(--color-warning); }
         .btn-aio:disabled { opacity: 0.3; cursor: not-allowed; }
 
         #sound-unlock {
@@ -41,6 +46,8 @@
     </style>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
     <script src="shared.js"></script>
 </head>
 <body>
@@ -50,8 +57,11 @@
         <small>เบราว์เซอร์ต้องการการแตะหนึ่งครั้งก่อนจึงจะเล่นเสียงได้</small>
     </div>
 
+    <div class="player-count-badge" id="player-count-badge">👥 ผู้เล่น: 0 คน</div>
+    <button class="fullscreen-btn" onclick="toggleFullscreen()" title="เต็มจอ">⛶</button>
+
     <div id="disabled-screen" style="display:none;">
-        🚫 หน้านี้ถูกปิดการใช้งานโดย Host
+        🚫 หน้านี้ถูกปิดการใช้งาน<br>โดยแผงควบคุม
     </div>
 
     <div id="main-content">
@@ -67,6 +77,7 @@
 
         <div id="board-view">
             <h1 class="board-title">🏆 LEADERBOARD</h1>
+            <div id="podium-row" class="podium-wrap"></div>
             <table class="leaderboard-table">
                 <thead>
                     <tr>
@@ -77,6 +88,12 @@
                 </thead>
                 <tbody id="board-list"></tbody>
             </table>
+        </div>
+
+        <div id="qr-view">
+            <h1 class="board-title">📱 สแกนเพื่อเข้าร่วม</h1>
+            <div id="screen-qr-code"></div>
+            <div id="qr-view-url"></div>
         </div>
 
         <div class="control-bar">
@@ -91,7 +108,16 @@
         const beeper = createBeeper();
         let serverOffset = 0;
         let currentScreen = 'LIGHTS'; // จะถูกซิงค์ทับด้วยค่าจริงจาก Firebase ทันทีที่โหลด
+        let currentQrOverlay = false;
+        let currentPodiumMode = 'ANIMATED';
+        let currentVibrationEnabled = true;
         let isGameRunning = false;
+        let latestPlayers = {};
+        let lastScreenView = null;
+        let firstGameStateLoad = true;
+
+        showLoadingOverlay('กำลังเชื่อมต่อ...');
+        setTimeout(() => { if (firstGameStateLoad) { firstGameStateLoad = false; hideLoadingOverlay(); } }, 5000);
 
         db.ref('.info/serverTimeOffset').on('value', snap => { serverOffset = snap.val() || 0; });
 
@@ -101,23 +127,20 @@
             this.style.display = 'none';
         }, { once: true });
 
+        renderQrCode('screen-qr-code', 220);
+        document.getElementById('qr-view-url').textContent = getJoinUrl();
+
         db.ref('gameState/aioEnabled').on('value', snap => {
             const enabled = snap.val() === true;
             document.getElementById('disabled-screen').style.display = enabled ? 'none' : 'flex';
             document.getElementById('main-content').style.display = enabled ? 'flex' : 'none';
         });
 
-        // แก้บั๊กเดิม: currentScreen เคยเป็นตัวแปร local ล้วนๆ ไม่เคยอ่านจาก DB
-        // ทำให้ถ้า refresh หน้ากลางเกม หรือใช้คู่กับ host.html พร้อมกัน หน้าจอจะไม่ตรงกับสถานะจริง
-        db.ref('gameState/screenView').on('value', snap => {
-            currentScreen = snap.val() || 'LIGHTS';
-            document.getElementById('lights-view').style.display = (currentScreen === 'LIGHTS') ? 'flex' : 'none';
-            document.getElementById('board-view').style.display = (currentScreen === 'LEADERBOARD') ? 'flex' : 'none';
-        });
-
         function toggleView() {
-            const next = (currentScreen === 'LIGHTS') ? 'LEADERBOARD' : 'LIGHTS';
-            db.ref('gameState/screenView').set(next); // เขียนลง DB จริง แทนสลับแค่ตัวแปร local
+            // วนลำดับ ไฟ → Leaderboard → QR → ไฟ ...
+            const order = ['LIGHTS', 'LEADERBOARD', 'QR'];
+            const next = order[(order.indexOf(currentScreen) + 1) % order.length];
+            db.ref('gameState/screenView').set(next);
         }
 
         function startAutoGame() {
@@ -125,7 +148,6 @@
 
             const now = Date.now() + serverOffset;
             const sequenceStartTime = now + 400;
-            // สุ่มเวลา 0 - 3000 ms + buffer 100ms เพื่อให้เห็นไฟดวงที่ 5 ติดก่อนไฟดับ (กรณีสุ่มได้ 0)
             const rawRandomDelay = Math.floor(Math.random() * 3001);
             const actualDelayMs = rawRandomDelay + 100;
             const targetGoTime = sequenceStartTime + 4000 + actualDelayMs;
@@ -136,13 +158,14 @@
                 goTime: targetGoTime,
                 mode: 'AUTO',
                 screenView: currentScreen,
-                aioEnabled: true
+                aioEnabled: true,
+                qrOverlayEnabled: currentQrOverlay,
+                podiumMode: currentPodiumMode,
+                vibrationEnabled: currentVibrationEnabled
             });
         }
 
         function resetGameAIO() {
-            if (!confirm('ยืนยันรีเซ็ตเกมทั้งหมด? สถานะและเวลาของผู้เล่นทุกคนในรอบนี้จะถูกล้าง')) return;
-
             const now = Date.now() + serverOffset;
 
             db.ref('gameState').set({
@@ -150,17 +173,17 @@
                 mode: 'AUTO',
                 screenView: currentScreen,
                 resetAt: now,
-                aioEnabled: true
+                aioEnabled: true,
+                qrOverlayEnabled: currentQrOverlay,
+                podiumMode: currentPodiumMode,
+                vibrationEnabled: currentVibrationEnabled
             });
 
             db.ref('players').once('value', snapshot => {
                 const players = snapshot.val();
                 if (players) {
                     for (let key in players) {
-                        db.ref(`players/${key}`).update({
-                            status: 'WAITING',
-                            time: 0
-                        });
+                        db.ref(`players/${key}`).update({ status: 'WAITING', time: 0 });
                     }
                 }
             });
@@ -169,9 +192,21 @@
         const lights = ['l1', 'l2', 'l3', 'l4', 'l5'].map(id => document.getElementById(id));
         const sequencer = createLightSequencer(lights, beeper, () => Date.now() + serverOffset);
 
+        const leaderboardController = createLeaderboardController({
+            podiumRowEl: document.getElementById('podium-row'),
+            tableBodyEl: document.getElementById('board-list'),
+            beeper
+        });
+
         db.ref('gameState').on('value', snapshot => {
             const data = snapshot.val();
             if (!data) return;
+
+            if (firstGameStateLoad) { firstGameStateLoad = false; hideLoadingOverlay(); }
+
+            currentQrOverlay = data.qrOverlayEnabled === true;
+            currentPodiumMode = data.podiumMode || 'ANIMATED';
+            currentVibrationEnabled = data.vibrationEnabled !== false;
 
             if (data.state === 'WAITING') {
                 isGameRunning = false;
@@ -182,36 +217,26 @@
                 document.getElementById('start-auto-btn').disabled = true;
                 sequencer.run(data);
             }
+
+            // ซิงค์หน้าจอหลักกับค่าจริงจาก DB เสมอ — กันหลุดซิงค์ตอน refresh หรือใช้คู่กับหน้า Control Panel
+            currentScreen = data.screenView || 'LIGHTS';
+            document.getElementById('lights-view').style.display = (currentScreen === 'LIGHTS') ? 'flex' : 'none';
+            document.getElementById('board-view').style.display = (currentScreen === 'LEADERBOARD') ? 'flex' : 'none';
+            document.getElementById('qr-view').style.display = (currentScreen === 'QR') ? 'flex' : 'none';
+
+            if (currentScreen === 'LEADERBOARD' && lastScreenView !== 'LEADERBOARD') {
+                leaderboardController.reveal(latestPlayers, currentPodiumMode);
+            }
+            lastScreenView = currentScreen;
         });
 
         db.ref('players').on('value', snapshot => {
-            const tbody = document.getElementById('board-list');
-            tbody.innerHTML = '';
-            const players = snapshot.val() || {};
-            const list = sortPlayersForLeaderboard(players);
+            latestPlayers = snapshot.val() || {};
+            document.getElementById('player-count-badge').textContent = `👥 ผู้เล่น: ${Object.keys(latestPlayers).length} คน`;
 
-            list.forEach((p, index) => {
-                const isFoul = p.status !== 'OK';
-
-                // ใช้ textContent แทน innerHTML เพื่อกันชื่อผู้เล่นที่มี HTML/สคริปต์แปลกปลอม
-                const tr = document.createElement('tr');
-                tr.className = `leaderboard-row ${isFoul ? 'foul' : ''}`;
-
-                const rankTd = document.createElement('td');
-                rankTd.textContent = isFoul ? '-' : (index + 1);
-
-                const nameTd = document.createElement('td');
-                nameTd.textContent = p.name || '(ไม่มีชื่อ)';
-
-                const timeTd = document.createElement('td');
-                timeTd.style.textAlign = 'right';
-                timeTd.textContent = p.status === 'OK' ? p.time + ' ms' : p.status;
-
-                tr.appendChild(rankTd);
-                tr.appendChild(nameTd);
-                tr.appendChild(timeTd);
-                tbody.appendChild(tr);
-            });
+            if (lastScreenView === 'LEADERBOARD') {
+                leaderboardController.refreshTableOnly(latestPlayers);
+            }
         });
     </script>
 </body>
