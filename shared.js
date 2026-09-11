@@ -258,6 +258,7 @@ function createLeaderboardController({ podiumRowEl, tableBodyEl, beeper }) {
     function renderPodiumBlock(p, rank) {
         const block = document.createElement('div');
         block.className = 'podium-block podium-rank-' + rank;
+        block.dataset.playerId = p.id; // เก็บ id ไว้ใช้ sync ชื่อทีหลัง ถ้า host เปลี่ยนชื่อหลัง podium ขึ้นจอไปแล้ว
         const medal = document.createElement('div');
         medal.className = 'podium-medal';
         medal.textContent = medalFor(rank);
@@ -334,12 +335,28 @@ function createLeaderboardController({ podiumRowEl, tableBodyEl, beeper }) {
         setTimeout(() => renderRestTable(rest, restStartRank, true), startDelay + revealOrder.length * 900 + 400);
     }
 
-    /** อัปเดตตารางเฉยๆ โดยไม่เล่นอนิเมชัน podium ใหม่ (ใช้ตอนคะแนนเปลี่ยนขณะอยู่หน้า leaderboard อยู่แล้ว) */
+    /** sync ชื่อ/เวลาบน podium ที่ขึ้นจอไปแล้ว ให้ตรงกับข้อมูลล่าสุด (แก้บั๊ก: เดิม podium ค้างชื่อเก่าถ้า host เปลี่ยนชื่อหลังเผยไปแล้ว) */
+    function syncPodiumWithPlayers(playersObj) {
+        const blocks = podiumRowEl.querySelectorAll('.podium-block');
+        blocks.forEach(block => {
+            const id = block.dataset.playerId;
+            const p = playersObj[id];
+            if (!p) return;
+            const nameEl = block.querySelector('.podium-name');
+            const timeEl = block.querySelector('.podium-time');
+            if (nameEl && p.name && nameEl.textContent !== p.name) nameEl.textContent = p.name;
+            const newTimeText = p.time + ' ms';
+            if (timeEl && timeEl.textContent !== newTimeText) timeEl.textContent = newTimeText;
+        });
+    }
+
+    /** อัปเดตตารางที่เหลือ + sync ชื่อบน podium โดยไม่เล่นอนิเมชัน podium ใหม่ (ใช้ตอนข้อมูลเปลี่ยนขณะอยู่หน้า leaderboard อยู่แล้ว) */
     function refreshTableOnly(playersObj) {
         const list = sortPlayersForLeaderboard(playersObj);
         const shownTop3 = podiumRowEl.children.length;
         renderRestTable(list.slice(shownTop3), shownTop3 + 1, false);
+        syncPodiumWithPlayers(playersObj);
     }
 
-    return { reveal, refreshTableOnly };
+    return { reveal, refreshTableOnly, syncPodiumWithPlayers };
 }
