@@ -106,6 +106,19 @@ function createBeeper() {
     };
 }
 
+/** เสียงกลองรัวก่อนเผยผล — สังเคราะห์เองล้วนๆ ไม่ต้องพึ่งไฟล์เสียงภายนอก ไม่มีปัญหาลิขสิทธิ์ */
+function playDrumroll(beeperInstance, durationMs = 1200) {
+    const clicksCount = 18;
+    for (let i = 0; i < clicksCount; i++) {
+        const t = Math.pow(i / clicksCount, 1.6) * durationMs; // เร่งจังหวะถี่ขึ้นเรื่อยๆ เหมือนกลองรัว
+        setTimeout(() => beeperInstance.play(180 + Math.random() * 40, 'square', 0.04), t);
+    }
+    setTimeout(() => {
+        beeperInstance.play(90, 'sawtooth', 0.5);   // เสียงตูมปิดท้าย
+        beeperInstance.play(1200, 'triangle', 0.3); // เสียงประกาย
+    }, durationMs + 80);
+}
+
 /* ============================================================
    การสั่น — ผู้เล่นปิดเองได้ (ไม่ชอบ) / host ปิดรวมได้ (ความเท่าเทียม)
    ============================================================ */
@@ -141,6 +154,12 @@ function getSpeedLabel(ms) {
 }
 
 /* ============================================================
+   Avatar / สีประจำตัว — เลือกตอนเข้าร่วม
+   ============================================================ */
+const AVATAR_OPTIONS = ['🦊', '🐱', '🐼', '🦁', '🐸', '🐵', '🦄', '🐯', '🐨', '🐰'];
+const COLOR_OPTIONS = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#1abc9c', '#3498db', '#9b59b6', '#e84393'];
+
+/* ============================================================
    ผู้เล่น: จัดเรียง / หาอันดับ
    ============================================================ */
 function sortPlayersForLeaderboard(playersObj) {
@@ -157,6 +176,31 @@ function computeMyRank(playersObj, myId) {
     const list = sortPlayersForLeaderboard(playersObj).filter(p => p.status === 'OK');
     const idx = list.findIndex(p => p.id === myId);
     return idx === -1 ? null : idx + 1;
+}
+
+/** จัดกลุ่มผู้เล่นเป็นทีม พร้อมคำนวณเวลาเฉลี่ย/ดีที่สุดของแต่ละทีม (สำหรับโหมดทีม) */
+function computeTeamRankings(playersObj) {
+    const teams = {};
+    Object.values(playersObj || {}).forEach(p => {
+        const teamName = (p.team || '').trim() || 'ไม่มีทีม';
+        if (!teams[teamName]) teams[teamName] = { team: teamName, members: [], okTimes: [] };
+        teams[teamName].members.push(p);
+        if (p.status === 'OK') teams[teamName].okTimes.push(p.time);
+    });
+    const teamList = Object.values(teams).map(t => ({
+        team: t.team,
+        members: t.members,
+        okCount: t.okTimes.length,
+        avgTime: t.okTimes.length ? Math.round(t.okTimes.reduce((a, b) => a + b, 0) / t.okTimes.length) : null,
+        bestTime: t.okTimes.length ? Math.min(...t.okTimes) : null
+    }));
+    teamList.sort((a, b) => {
+        if (a.avgTime !== null && b.avgTime !== null) return a.avgTime - b.avgTime;
+        if (a.avgTime !== null) return -1;
+        if (b.avgTime !== null) return 1;
+        return 0;
+    });
+    return teamList;
 }
 
 /* ============================================================
@@ -247,12 +291,16 @@ function createLightSequencer(lights, beeper, getServerNow) {
 
 /* ============================================================
    Leaderboard + Podium reveal (สไตล์ Kahoot: 3 → 2 → 1 แล้วค่อยขึ้นตารางที่เหลือ)
+   รองรับทั้งโหมดรายบุคคลและโหมดทีม
    ใช้ร่วมกันระหว่าง screen.html และ all-in-one.html
    ============================================================ */
 function createLeaderboardController({ podiumRowEl, tableBodyEl, beeper }) {
 
     function medalFor(rank) {
         return rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉';
+    }
+    function nameWithAvatar(p) {
+        return (p.avatar ? p.avatar + ' ' : '') + (p.name || '(ไม่มีชื่อ)');
     }
 
     function renderPodiumBlock(p, rank) {
@@ -264,7 +312,8 @@ function createLeaderboardController({ podiumRowEl, tableBodyEl, beeper }) {
         medal.textContent = medalFor(rank);
         const name = document.createElement('div');
         name.className = 'podium-name';
-        name.textContent = p.name || '(ไม่มีชื่อ)';
+        name.textContent = nameWithAvatar(p);
+        if (p.color) name.style.color = p.color;
         const time = document.createElement('div');
         time.className = 'podium-time';
         time.textContent = p.time + ' ms';
@@ -289,13 +338,17 @@ function createLeaderboardController({ podiumRowEl, tableBodyEl, beeper }) {
             rankTd.textContent = isFoul ? '-' : rank;
 
             const nameTd = document.createElement('td');
-            nameTd.textContent = p.name || '(ไม่มีชื่อ)';
+            nameTd.textContent = nameWithAvatar(p);
+            if (p.color) nameTd.style.color = p.color;
 
             const timeTd = document.createElement('td');
             timeTd.className = 'time-col';
             let timeDisplay = 'WAITING...';
             if (p.status === 'OK') timeDisplay = `${p.time} ms`;
             else if (p.status === 'JUMP_START') timeDisplay = '❌ JUMP START';
+            else if (p.status === 'LOCKED') timeDisplay = '🔒 รอรอบถัดไป';
+            else if (p.status === 'ELIMINATED') timeDisplay = '❌ ถูกคัดออก';
+            else if (p.status === 'PRACTICE') timeDisplay = '🎯 กำลังฝึกซ้อม';
             timeTd.textContent = timeDisplay;
 
             tr.appendChild(rankTd); tr.appendChild(nameTd); tr.appendChild(timeTd);
@@ -322,9 +375,10 @@ function createLeaderboardController({ podiumRowEl, tableBodyEl, beeper }) {
             return;
         }
 
-        // โหมดอนิเมชันสไตล์ Kahoot: เผยอันดับ 3 → 2 → 1 ทีละคน แล้วค่อยโชว์ตารางที่เหลือ
+        // โหมดอนิเมชันสไตล์ Kahoot: กลองรัวก่อน แล้วเผยอันดับ 3 → 2 → 1 ทีละคน แล้วค่อยโชว์ตารางที่เหลือ
+        playDrumroll(beeper);
         const revealOrder = [3, 2, 1].filter(r => top3[r - 1]);
-        const startDelay = 250;
+        const startDelay = 1400;
         revealOrder.forEach((rank, seq) => {
             setTimeout(() => {
                 renderPodiumBlock(top3[rank - 1], rank);
@@ -335,7 +389,7 @@ function createLeaderboardController({ podiumRowEl, tableBodyEl, beeper }) {
         setTimeout(() => renderRestTable(rest, restStartRank, true), startDelay + revealOrder.length * 900 + 400);
     }
 
-    /** sync ชื่อ/เวลาบน podium ที่ขึ้นจอไปแล้ว ให้ตรงกับข้อมูลล่าสุด (แก้บั๊ก: เดิม podium ค้างชื่อเก่าถ้า host เปลี่ยนชื่อหลังเผยไปแล้ว) */
+    /** sync ชื่อ/เวลาบน podium ที่ขึ้นจอไปแล้ว ให้ตรงกับข้อมูลล่าสุด */
     function syncPodiumWithPlayers(playersObj) {
         const blocks = podiumRowEl.querySelectorAll('.podium-block');
         blocks.forEach(block => {
@@ -344,13 +398,14 @@ function createLeaderboardController({ podiumRowEl, tableBodyEl, beeper }) {
             if (!p) return;
             const nameEl = block.querySelector('.podium-name');
             const timeEl = block.querySelector('.podium-time');
-            if (nameEl && p.name && nameEl.textContent !== p.name) nameEl.textContent = p.name;
+            const expectedName = nameWithAvatar(p);
+            if (nameEl && nameEl.textContent !== expectedName) nameEl.textContent = expectedName;
             const newTimeText = p.time + ' ms';
             if (timeEl && timeEl.textContent !== newTimeText) timeEl.textContent = newTimeText;
         });
     }
 
-    /** อัปเดตตารางที่เหลือ + sync ชื่อบน podium โดยไม่เล่นอนิเมชัน podium ใหม่ (ใช้ตอนข้อมูลเปลี่ยนขณะอยู่หน้า leaderboard อยู่แล้ว) */
+    /** อัปเดตตารางที่เหลือ + sync ชื่อบน podium โดยไม่เล่นอนิเมชัน podium ใหม่ */
     function refreshTableOnly(playersObj) {
         const list = sortPlayersForLeaderboard(playersObj);
         const shownTop3 = podiumRowEl.children.length;
@@ -358,5 +413,86 @@ function createLeaderboardController({ podiumRowEl, tableBodyEl, beeper }) {
         syncPodiumWithPlayers(playersObj);
     }
 
-    return { reveal, refreshTableOnly, syncPodiumWithPlayers };
+    /* ---------- โหมดทีม ---------- */
+    function renderTeamPodiumBlock(t, rank) {
+        const block = document.createElement('div');
+        block.className = 'podium-block podium-rank-' + rank;
+        block.dataset.team = t.team;
+        const medal = document.createElement('div');
+        medal.className = 'podium-medal';
+        medal.textContent = medalFor(rank);
+        const name = document.createElement('div');
+        name.className = 'podium-name';
+        name.textContent = `🏷️ ${t.team}`;
+        const time = document.createElement('div');
+        time.className = 'podium-time';
+        time.textContent = t.avgTime !== null ? `เฉลี่ย ${t.avgTime} ms` : 'ยังไม่มีผล';
+        const bar = document.createElement('div');
+        bar.className = 'podium-bar podium-bar-' + rank;
+        bar.textContent = rank;
+        block.appendChild(medal); block.appendChild(name); block.appendChild(time); block.appendChild(bar);
+        podiumRowEl.appendChild(block);
+    }
+    function renderTeamRestTable(teamList, startRank, animate) {
+        tableBodyEl.innerHTML = '';
+        teamList.forEach((t, i) => {
+            const rank = startRank + i;
+            const tr = document.createElement('tr');
+            tr.className = 'leaderboard-row' + (animate ? ' row-animate' : '');
+            if (animate) tr.style.animationDelay = (i * 60) + 'ms';
+            const rankTd = document.createElement('td');
+            rankTd.className = 'rank';
+            rankTd.textContent = rank;
+            const nameTd = document.createElement('td');
+            nameTd.textContent = `🏷️ ${t.team} (${t.members.length} คน)`;
+            const timeTd = document.createElement('td');
+            timeTd.className = 'time-col';
+            timeTd.textContent = t.avgTime !== null ? `เฉลี่ย ${t.avgTime} ms` : 'ยังไม่มีผล';
+            tr.appendChild(rankTd); tr.appendChild(nameTd); tr.appendChild(timeTd);
+            tableBodyEl.appendChild(tr);
+        });
+    }
+    function revealTeams(playersObj, mode) {
+        const teamList = computeTeamRankings(playersObj);
+        const top3 = teamList.slice(0, 3).filter(t => t.avgTime !== null);
+        const top3Names = new Set(top3.map(t => t.team));
+        const rest = teamList.filter(t => !top3Names.has(t.team));
+        const restStartRank = top3.length + 1;
+
+        podiumRowEl.innerHTML = '';
+        tableBodyEl.innerHTML = '';
+
+        if (mode !== 'ANIMATED' || top3.length === 0) {
+            top3.forEach((t, i) => renderTeamPodiumBlock(t, i + 1));
+            renderTeamRestTable(rest, restStartRank, true);
+            if (top3.length) fireConfettiSafe();
+            return;
+        }
+
+        playDrumroll(beeper);
+        const revealOrder = [3, 2, 1].filter(r => top3[r - 1]);
+        const startDelay = 1400;
+        revealOrder.forEach((rank, seq) => {
+            setTimeout(() => {
+                renderTeamPodiumBlock(top3[rank - 1], rank);
+                beeper.play(rank === 1 ? 880 : 600, 'sine', 0.25);
+                if (rank === 1) fireConfettiSafe();
+            }, startDelay + seq * 900);
+        });
+        setTimeout(() => renderTeamRestTable(rest, restStartRank, true), startDelay + revealOrder.length * 900 + 400);
+    }
+    function refreshTeamTableOnly(playersObj) {
+        const teamList = computeTeamRankings(playersObj);
+        const shownTop3 = podiumRowEl.children.length;
+        renderTeamRestTable(teamList.slice(shownTop3), shownTop3 + 1, false);
+        const blocks = podiumRowEl.querySelectorAll('.podium-block');
+        blocks.forEach((block) => {
+            const t = teamList.find(x => x.team === block.dataset.team);
+            if (!t) return;
+            const timeEl = block.querySelector('.podium-time');
+            if (timeEl) timeEl.textContent = t.avgTime !== null ? `เฉลี่ย ${t.avgTime} ms` : 'ยังไม่มีผล';
+        });
+    }
+
+    return { reveal, refreshTableOnly, syncPodiumWithPlayers, revealTeams, refreshTeamTableOnly };
 }
