@@ -12,7 +12,7 @@
 
         #main-content { width: 100%; display: flex; flex-direction: column; align-items: center; flex: 1; justify-content: center; }
         #lights-view { display: none; justify-content: center; align-items: center; margin-bottom: 20px; }
-        .light-board { display: flex; gap: 15px; background: #111; padding: 30px; border-radius: 20px; border: 3px solid #222; }
+        .light-board { display: flex; gap: 15px; background: #111; padding: 30px; border-radius: 20px; border: 3px solid #222; transition: transform 0.2s ease; }
         .light-column { display: flex; flex-direction: column; gap: 15px; background: #000; padding: 12px; border-radius: 12px; }
         .light { width: 70px; height: 70px; border-radius: 50%; background: #222; }
         .light.red { background: #ff0000; box-shadow: 0 0 35px #ff0000; }
@@ -57,8 +57,17 @@
         <small>เบราว์เซอร์ต้องการการแตะหนึ่งครั้งก่อนจึงจะเล่นเสียงได้</small>
     </div>
 
+    <audio id="lobby-music" loop></audio>
+
+    <div class="round-badge" id="round-badge" style="display:none;"></div>
     <div class="player-count-badge" id="player-count-badge">👥 ผู้เล่น: 0 คน</div>
     <button class="fullscreen-btn" onclick="toggleFullscreen()" title="เต็มจอ">⛶</button>
+
+    <div id="winner-banner" class="winner-banner">
+        <div class="trophy">🏆</div>
+        <div class="winner-name" id="winner-name-text"></div>
+        <div class="winner-sub">ผู้ชนะการแข่งขันแบบแพ้คัดออก!</div>
+    </div>
 
     <div id="disabled-screen" style="display:none;">
         🚫 หน้านี้ถูกปิดการใช้งาน<br>โดยแผงควบคุม
@@ -76,7 +85,7 @@
         </div>
 
         <div id="board-view">
-            <h1 class="board-title">🏆 LEADERBOARD</h1>
+            <h1 class="board-title" id="board-title-text">🏆 LEADERBOARD</h1>
             <div id="podium-row" class="podium-wrap"></div>
             <table class="leaderboard-table">
                 <thead>
@@ -111,22 +120,35 @@
         let currentQrOverlay = false;
         let currentPodiumMode = 'ANIMATED';
         let currentVibrationEnabled = true;
+        let currentPracticeModeEnabled = false;
+        let currentLightsScale = 1;
+        let currentTotalRounds = 0;
+        let currentEliminationModeEnabled = false;
+        let currentTeamModeEnabled = false;
+        let currentTeamPodiumEnabled = false;
+        let currentLobbyMusicEnabled = false;
+        let currentLobbyMusicUrl = '';
+        let currentLobbyMusicVolume = 50;
+        let currentHostPin = '';
         let isGameRunning = false;
         let latestPlayers = {};
         let lastScreenView = null;
         let playersLoaded = false;
         let pendingLeaderboardReveal = false;
         let firstGameStateLoad = true;
+        let winnerBannerShownForRound = false;
+        let lastRoundSeen = 1;
 
         showLoadingOverlay('กำลังเชื่อมต่อ...');
         setTimeout(() => { if (firstGameStateLoad) { firstGameStateLoad = false; hideLoadingOverlay(); } }, 5000);
 
         db.ref('.info/serverTimeOffset').on('value', snap => { serverOffset = snap.val() || 0; });
 
-        // ปลดล็อกเสียง
+        // ปลดล็อกเสียง + เริ่มเพลงลอบบี้
         document.getElementById('sound-unlock').addEventListener('click', function () {
             beeper.unlock();
             this.style.display = 'none';
+            tryPlayLobbyMusic();
         }, { once: true });
 
         renderQrCode('screen-qr-code', 220);
@@ -138,11 +160,62 @@
             document.getElementById('main-content').style.display = enabled ? 'flex' : 'none';
         });
 
+        // === เพลงลอบบี้ ===
+        const musicEl = document.getElementById('lobby-music');
+        function tryPlayLobbyMusic() {
+            if (!currentLobbyMusicEnabled || !currentLobbyMusicUrl) return;
+            musicEl.play().catch(() => {});
+        }
+        function updateLobbyMusicState(gameData) {
+            currentLobbyMusicEnabled = gameData.lobbyMusicEnabled === true;
+            const newUrl = gameData.lobbyMusicUrl || '';
+            if (newUrl !== currentLobbyMusicUrl) {
+                currentLobbyMusicUrl = newUrl;
+                musicEl.src = currentLobbyMusicUrl;
+            }
+            musicEl.volume = (gameData.lobbyMusicVolume != null ? gameData.lobbyMusicVolume : 50) / 100;
+
+            const shouldPlay = currentLobbyMusicEnabled && currentLobbyMusicUrl && gameData.state === 'WAITING';
+            if (shouldPlay) { tryPlayLobbyMusic(); } else { musicEl.pause(); }
+        }
+
+        function checkWinnerBanner() {
+            if (!currentEliminationModeEnabled) return;
+            const list = Object.values(latestPlayers);
+            if (list.length < 2) return;
+            const survivors = list.filter(p => !p.eliminated);
+            if (survivors.length === 1 && !winnerBannerShownForRound) {
+                winnerBannerShownForRound = true;
+                document.getElementById('winner-name-text').textContent = `${survivors[0].avatar || ''} ${survivors[0].name}`;
+                document.getElementById('winner-banner').classList.add('show');
+                fireConfettiSafe();
+            }
+        }
+
         function toggleView() {
-            // วนลำดับ ไฟ → Leaderboard → QR → ไฟ ...
             const order = ['LIGHTS', 'LEADERBOARD', 'QR'];
             const next = order[(order.indexOf(currentScreen) + 1) % order.length];
             db.ref('gameState/screenView').set(next);
+        }
+
+        // ฟิลด์การตั้งค่าทั้งหมดที่ต้องแนบไปด้วยทุกครั้งที่เขียนทับ gameState ทั้งก้อน กันหายตอน Start/Reset
+        function buildFullGameStateSettings() {
+            return {
+                aioEnabled: true,
+                qrOverlayEnabled: currentQrOverlay,
+                podiumMode: currentPodiumMode,
+                vibrationEnabled: currentVibrationEnabled,
+                practiceModeEnabled: currentPracticeModeEnabled,
+                lightsScale: currentLightsScale,
+                totalRounds: currentTotalRounds,
+                eliminationModeEnabled: currentEliminationModeEnabled,
+                teamModeEnabled: currentTeamModeEnabled,
+                teamPodiumEnabled: currentTeamPodiumEnabled,
+                lobbyMusicEnabled: currentLobbyMusicEnabled,
+                lobbyMusicUrl: currentLobbyMusicUrl,
+                lobbyMusicVolume: currentLobbyMusicVolume,
+                hostPin: currentHostPin
+            };
         }
 
         function startAutoGame() {
@@ -154,32 +227,24 @@
             const actualDelayMs = rawRandomDelay + 100;
             const targetGoTime = sequenceStartTime + 4000 + actualDelayMs;
 
-            db.ref('gameState').set({
+            db.ref('gameState').set(Object.assign({
                 state: 'STARTING',
                 startTime: sequenceStartTime,
                 goTime: targetGoTime,
                 mode: 'AUTO',
-                screenView: currentScreen,
-                aioEnabled: true,
-                qrOverlayEnabled: currentQrOverlay,
-                podiumMode: currentPodiumMode,
-                vibrationEnabled: currentVibrationEnabled
-            });
+                screenView: currentScreen
+            }, buildFullGameStateSettings()));
         }
 
         function resetGameAIO() {
             const now = Date.now() + serverOffset;
 
-            db.ref('gameState').set({
+            db.ref('gameState').set(Object.assign({
                 state: 'WAITING',
                 mode: 'AUTO',
                 screenView: currentScreen,
-                resetAt: now,
-                aioEnabled: true,
-                qrOverlayEnabled: currentQrOverlay,
-                podiumMode: currentPodiumMode,
-                vibrationEnabled: currentVibrationEnabled
-            });
+                resetAt: now
+            }, buildFullGameStateSettings()));
 
             db.ref('players').once('value', snapshot => {
                 const players = snapshot.val();
@@ -200,6 +265,21 @@
             beeper
         });
 
+        function revealLeaderboardNow() {
+            if (currentTeamPodiumEnabled) {
+                leaderboardController.revealTeams(latestPlayers, currentPodiumMode);
+            } else {
+                leaderboardController.reveal(latestPlayers, currentPodiumMode);
+            }
+        }
+        function refreshLeaderboardNow() {
+            if (currentTeamPodiumEnabled) {
+                leaderboardController.refreshTeamTableOnly(latestPlayers);
+            } else {
+                leaderboardController.refreshTableOnly(latestPlayers);
+            }
+        }
+
         db.ref('gameState').on('value', snapshot => {
             const data = snapshot.val();
             if (!data) return;
@@ -209,18 +289,42 @@
             currentQrOverlay = data.qrOverlayEnabled === true;
             currentPodiumMode = data.podiumMode || 'ANIMATED';
             currentVibrationEnabled = data.vibrationEnabled !== false;
+            currentPracticeModeEnabled = data.practiceModeEnabled === true;
+            currentLightsScale = data.lightsScale || 1;
+            currentTotalRounds = data.totalRounds || 0;
+            currentEliminationModeEnabled = data.eliminationModeEnabled === true;
+            currentTeamModeEnabled = data.teamModeEnabled === true;
+            currentTeamPodiumEnabled = data.teamPodiumEnabled === true;
+            currentHostPin = data.hostPin || '';
+            document.querySelector('.light-board').style.transform = `scale(${currentLightsScale})`;
+            document.getElementById('board-title-text').textContent = currentTeamPodiumEnabled ? '🏆 LEADERBOARD (ทีม)' : '🏆 LEADERBOARD';
+
+            updateLobbyMusicState(data);
+
+            const round = data.currentRound || 1;
+            if (round !== lastRoundSeen) {
+                lastRoundSeen = round;
+                winnerBannerShownForRound = false;
+            }
+            const roundBadge = document.getElementById('round-badge');
+            if (round > 1 || currentTotalRounds > 0) {
+                roundBadge.style.display = 'block';
+                roundBadge.textContent = `🏁 รอบที่ ${round}` + (currentTotalRounds > 0 ? ` / ${currentTotalRounds}` : '');
+            } else {
+                roundBadge.style.display = 'none';
+            }
 
             if (data.state === 'WAITING') {
                 isGameRunning = false;
                 sequencer.resetLights();
                 document.getElementById('start-auto-btn').disabled = false;
+                document.getElementById('winner-banner').classList.remove('show');
             } else {
                 isGameRunning = true;
                 document.getElementById('start-auto-btn').disabled = true;
                 sequencer.run(data);
             }
 
-            // ซิงค์หน้าจอหลักกับค่าจริงจาก DB เสมอ — กันหลุดซิงค์ตอน refresh หรือใช้คู่กับหน้า Control Panel
             currentScreen = data.screenView || 'LIGHTS';
             document.getElementById('lights-view').style.display = (currentScreen === 'LIGHTS') ? 'flex' : 'none';
             document.getElementById('board-view').style.display = (currentScreen === 'LEADERBOARD') ? 'flex' : 'none';
@@ -228,9 +332,8 @@
 
             if (currentScreen === 'LEADERBOARD' && lastScreenView !== 'LEADERBOARD') {
                 if (playersLoaded) {
-                    leaderboardController.reveal(latestPlayers, currentPodiumMode);
+                    revealLeaderboardNow();
                 } else {
-                    // แก้บั๊ก race condition: ข้อมูลผู้เล่นยังมาไม่ถึง (เช่น เพิ่ง refresh จอกลางงานตรงหน้า leaderboard พอดี)
                     pendingLeaderboardReveal = true;
                 }
             }
@@ -244,11 +347,12 @@
 
             if (pendingLeaderboardReveal) {
                 pendingLeaderboardReveal = false;
-                leaderboardController.reveal(latestPlayers, currentPodiumMode);
+                revealLeaderboardNow();
             } else if (lastScreenView === 'LEADERBOARD') {
-                // ถ้าอยู่หน้า leaderboard อยู่แล้ว แค่รีเฟรชตาราง+ชื่อบน podium ไม่เล่นอนิเมชันซ้ำ
-                leaderboardController.refreshTableOnly(latestPlayers);
+                refreshLeaderboardNow();
             }
+
+            checkWinnerBanner();
         });
     </script>
 </body>
