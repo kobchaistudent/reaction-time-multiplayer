@@ -7,27 +7,38 @@
     <link rel="stylesheet" href="shared.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
-        body { background: var(--color-bg); color: var(--color-text); height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; overflow: hidden; }
+        body { background: var(--color-bg); color: var(--color-text); min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; overflow-x: hidden; padding: 20px 0; }
 
         .login-card { background: var(--color-panel); padding: 30px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); width: 90%; max-width: 400px; }
-        .login-card input { width: 100%; padding: 15px; border-radius: 10px; border: 1px solid #444; background: #222; color: #fff; font-size: 1.1rem; text-align: center; margin-bottom: 15px; }
-        .login-card button { width: 100%; padding: 15px; background: var(--color-success); color: white; border: none; border-radius: 10px; font-size: 1.1rem; font-weight: bold; cursor: pointer; }
+        .login-card input[type="text"] { width: 100%; padding: 15px; border-radius: 10px; border: 1px solid #444; background: #222; color: #fff; font-size: 1.1rem; text-align: center; margin-bottom: 15px; }
+        .login-card .team-input { font-size: 0.95rem; padding: 12px; }
+        .login-card button.join-submit { width: 100%; padding: 15px; background: var(--color-success); color: white; border: none; border-radius: 10px; font-size: 1.1rem; font-weight: bold; cursor: pointer; }
         .login-card button:disabled { opacity: 0.5; cursor: not-allowed; }
         .login-best { font-size: 0.9rem; color: var(--color-text-dim); margin-top: 14px; }
+        .picker-label { font-size: 0.85rem; color: var(--color-text-dim); margin-bottom: 8px; text-align: left; }
 
         .game-area { display: none; width: 100vw; height: 100vh; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; transition: background 0.15s; touch-action: manipulation; }
         .game-area.waiting { background: var(--color-panel); }
         .game-area.ready { background: #c0392b; }
         .game-area.go { background: #27ae60; }
         .game-area.foul { background: var(--color-warning); }
+        .game-area.eliminated { background: #1a1a22; }
 
         .status-title { font-size: 2.5rem; font-weight: bold; margin-bottom: 10px; }
         .status-sub { font-size: 1.2rem; opacity: 0.85; }
         .status-rank { font-size: 1.1rem; margin-top: 8px; opacity: 0.9; font-weight: 600; }
         .status-key { font-size: 0.95rem; opacity: 0.55; margin-top: 14px; }
         .status-best { font-size: 0.9rem; opacity: 0.55; margin-top: 6px; }
+        .status-cumulative { font-size: 0.85rem; opacity: 0.5; margin-top: 4px; }
 
-        .player-info { position: absolute; top: 15px; left: 15px; font-size: 1rem; opacity: 0.7; }
+        .practice-btn {
+            margin-top: 22px; padding: 12px 22px; border-radius: 12px; border: 2px solid var(--color-blue);
+            background: transparent; color: var(--color-blue); font-size: 1rem; font-weight: 700; cursor: pointer; display: none;
+        }
+
+        .player-info { position: absolute; top: 15px; left: 15px; font-size: 1rem; opacity: 0.7; text-align: left; }
+        .player-info .team-line { font-size: 0.8rem; opacity: 0.8; }
+        .round-badge-local { position: fixed; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.3); padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; z-index: 30; }
         .vibrate-toggle {
             position: absolute; top: 15px; right: 15px; background: rgba(0,0,0,0.3); border: none;
             color: #fff; font-size: 1.3rem; padding: 8px 10px; border-radius: 10px; cursor: pointer;
@@ -36,6 +47,27 @@
             position: absolute; top: 60px; right: 15px; font-size: 0.85rem;
             background: var(--color-danger); padding: 6px 12px; border-radius: 8px; display: none;
         }
+
+        /* === โหมดฝึกซ้อม === */
+        #practice-screen {
+            display: none; width: 100vw; height: 100vh; flex-direction: column; justify-content: center; align-items: center;
+            background: #14141c; text-align: center; padding: 20px; touch-action: manipulation; cursor: pointer;
+        }
+        .practice-badge {
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+            background: var(--color-blue); color: #fff; padding: 6px 16px; border-radius: 20px; font-weight: 700; font-size: 0.9rem;
+        }
+        .practice-light-board { display: flex; gap: 10px; background: #000; padding: 18px 22px; border-radius: 16px; margin-bottom: 24px; }
+        .practice-light { width: 40px; height: 40px; border-radius: 50%; background: #222; }
+        .practice-light.red { background: #ff0000; box-shadow: 0 0 20px #ff0000; }
+        #practice-title { font-size: 2rem; font-weight: bold; margin-bottom: 8px; }
+        #practice-result { font-size: 1.05rem; opacity: 0.85; margin-bottom: 22px; min-height: 1.4em; }
+        .practice-actions { display: flex; gap: 10px; }
+        .practice-actions button {
+            padding: 12px 20px; border-radius: 10px; border: none; font-weight: 700; cursor: pointer; font-size: 0.95rem;
+        }
+        .btn-practice-retry { background: var(--color-success); color: #fff; }
+        .btn-practice-exit { background: #444; color: #fff; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -47,20 +79,52 @@
     <div id="login-screen" class="login-card">
         <h2 style="margin-bottom: 20px; color: var(--color-primary);">🏎️ เข้าร่วมการแข่งขัน</h2>
         <input type="text" id="player-name-input" placeholder="ใส่ชื่อของคุณ..." maxlength="15">
-        <button id="join-btn" onclick="joinGame()">เข้าร่วมเกม</button>
+        <input type="text" id="team-name-input" class="team-input" placeholder="ชื่อทีม (ถ้ามี ไม่บังคับ)" maxlength="20">
+
+        <div class="picker-label">เลือกตัวละครของคุณ:</div>
+        <div class="picker-row" id="avatar-picker"></div>
+
+        <div class="picker-label">เลือกสีประจำตัว:</div>
+        <div class="picker-row" id="color-picker"></div>
+
+        <button id="join-btn" class="join-submit" onclick="joinGame()">เข้าร่วมเกม</button>
         <div id="login-best" class="login-best"></div>
     </div>
 
     <!-- หน้าเกมหลัก -->
     <div id="game-screen" class="game-area waiting" onclick="handleTap()">
-        <div class="player-info">ผู้เล่น: <span id="display-name"></span></div>
+        <div class="round-badge-local" id="round-badge-local" style="display:none;"></div>
+        <div class="player-info">
+            <div>ผู้เล่น: <span id="display-name"></span></div>
+            <div class="team-line" id="display-team" style="display:none;"></div>
+        </div>
         <button id="vibrate-toggle" class="vibrate-toggle" onclick="onToggleVibration(event)" title="เปิด/ปิดการสั่น">📳</button>
         <div id="conn-warn" class="conn-warn">⚠️ การเชื่อมต่อขาดหาย...</div>
         <div id="status-title" class="status-title">🏁 เตรียมตัวให้พร้อม รอเริ่มเกม...</div>
         <div id="status-sub" class="status-sub"></div>
         <div id="status-rank" class="status-rank" style="display:none;"></div>
         <div id="status-key" class="status-key">แตะหน้าจอ หรือกด <b>Spacebar</b></div>
+        <button id="practice-btn" class="practice-btn" onclick="onEnterPractice(event)">🎯 ลองฝึกซ้อมก่อนเล่นจริง</button>
         <div id="status-best" class="status-best"></div>
+        <div id="status-cumulative" class="status-cumulative"></div>
+    </div>
+
+    <!-- โหมดฝึกซ้อม (เล่นแบบ local ล้วนๆ ไม่กระทบคะแนนจริง) -->
+    <div id="practice-screen">
+        <div class="practice-badge">🎯 โหมดฝึกซ้อม (ไม่นับคะแนนจริง)</div>
+        <div class="practice-light-board">
+            <div class="practice-light" id="pl1"></div>
+            <div class="practice-light" id="pl2"></div>
+            <div class="practice-light" id="pl3"></div>
+            <div class="practice-light" id="pl4"></div>
+            <div class="practice-light" id="pl5"></div>
+        </div>
+        <div id="practice-title">เตรียมตัว...</div>
+        <div id="practice-result"></div>
+        <div class="practice-actions" onclick="event.stopPropagation()">
+            <button class="btn-practice-retry" onclick="startPracticeRound()">🔁 ลองใหม่</button>
+            <button class="btn-practice-exit" onclick="exitPracticeMode()">🚪 กลับไปรอเกมจริง</button>
+        </div>
     </div>
 
     <script>
@@ -77,6 +141,9 @@
         let isJoined = false;
         let joinInProgress = false;
         let lastGameStateForVibration = null;
+        let messagesListenStartTime = null;
+        let selectedAvatar = localStorage.getItem('rt_avatar') || AVATAR_OPTIONS[0];
+        let selectedColor = localStorage.getItem('rt_color') || COLOR_OPTIONS[0];
 
         showLoadingOverlay('กำลังเชื่อมต่อ...');
 
@@ -87,13 +154,37 @@
                 hideLoadingOverlay();
             }
         });
-
-        // สำรอง เผื่อ '.info/serverTimeOffset' มาช้าผิดปกติ ไม่ให้ผู้เล่นค้างที่ loading ตลอดไป
         setTimeout(() => { if (!firstOffsetReceived) { firstOffsetReceived = true; hideLoadingOverlay(); } }, 4000);
 
         db.ref('.info/connected').on('value', snap => {
             document.getElementById('conn-warn').style.display = (snap.val() === true) ? 'none' : 'block';
         });
+
+        // === Avatar / สีประจำตัว ===
+        function renderPickers() {
+            const avatarEl = document.getElementById('avatar-picker');
+            avatarEl.innerHTML = '';
+            AVATAR_OPTIONS.forEach(a => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'avatar-option' + (a === selectedAvatar ? ' selected' : '');
+                btn.textContent = a;
+                btn.onclick = () => { selectedAvatar = a; localStorage.setItem('rt_avatar', a); renderPickers(); };
+                avatarEl.appendChild(btn);
+            });
+
+            const colorEl = document.getElementById('color-picker');
+            colorEl.innerHTML = '';
+            COLOR_OPTIONS.forEach(c => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'color-option' + (c === selectedColor ? ' selected' : '');
+                btn.style.background = c;
+                btn.onclick = () => { selectedColor = c; localStorage.setItem('rt_color', c); renderPickers(); };
+                colorEl.appendChild(btn);
+            });
+        }
+        renderPickers();
 
         // === Personal Best (เก็บในเครื่องผู้เล่นเอง) ===
         function getPersonalBest() {
@@ -104,7 +195,7 @@
             const best = getPersonalBest();
             if (best === null || ms < best) {
                 localStorage.setItem('rt_personal_best', String(ms));
-                return true; // ได้สถิติใหม่
+                return true;
             }
             return false;
         }
@@ -119,7 +210,7 @@
             document.getElementById('vibrate-toggle').textContent = getVibrationPref() ? '📳' : '🔕';
         }
         function onToggleVibration(e) {
-            e.stopPropagation(); // กันไปโดน handleTap() ของพื้นหลัง
+            e.stopPropagation();
             setVibrationPref(!getVibrationPref());
             refreshVibrateIcon();
         }
@@ -128,13 +219,98 @@
         window.addEventListener('DOMContentLoaded', () => {
             const savedName = localStorage.getItem('rt_player_name');
             if (savedName) document.getElementById('player-name-input').value = savedName;
+            const savedTeam = localStorage.getItem('rt_team_name');
+            if (savedTeam) document.getElementById('team-name-input').value = savedTeam;
         });
+
+        // === แก้ปัญหา: รีเฟรชหน้าแล้วต้องกรอกชื่อ/กดเข้าร่วมใหม่ ===
+        function attemptAutoRejoin() {
+            db.ref(`players/${myPlayerId}`).once('value', snap => {
+                if (isJoined) return;
+                const p = snap.val();
+                if (!p) return;
+
+                myName = p.name || '';
+                myStatus = p.status || 'WAITING';
+                isJoined = true;
+
+                localStorage.setItem('rt_player_name', myName);
+                document.getElementById('display-name').innerText = myName;
+                renderTeamLine(p.team);
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('game-screen').style.display = 'flex';
+
+                db.ref(`players/${myPlayerId}`).update({ connected: true });
+                refreshDisconnectHook();
+                requestWakeLock();
+
+                listenToGame();
+                listenToSelf();
+                listenToAllPlayers();
+                listenToMessages();
+
+                if (myStatus === 'PRACTICE') showPracticeScreen();
+            });
+        }
+        attemptAutoRejoin();
+
+        function renderTeamLine(team) {
+            const el = document.getElementById('display-team');
+            if (team) {
+                el.style.display = 'block';
+                el.textContent = `🏷️ ทีม ${team}`;
+            } else {
+                el.style.display = 'none';
+            }
+        }
+
+        function renderRoundBadge() {
+            const el = document.getElementById('round-badge-local');
+            const total = gameState.totalRounds || 0;
+            const current = gameState.currentRound || 1;
+            if (current > 1 || total > 0) {
+                el.style.display = 'block';
+                el.textContent = `🏁 รอบที่ ${current}` + (total > 0 ? ` / ${total}` : '');
+            } else {
+                el.style.display = 'none';
+            }
+        }
+
+        // === กันหน้าจอดับเอง ระหว่างอยู่ในหน้าเว็บนี้ ===
+        let wakeLock = null;
+        async function requestWakeLock() {
+            if (!('wakeLock' in navigator)) return;
+            if (wakeLock && !wakeLock.released) return;
+            try {
+                wakeLock = await navigator.wakeLock.request('screen');
+            } catch (err) { /* ขอไม่สำเร็จ ปล่อยผ่านเงียบๆ */ }
+        }
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') requestWakeLock();
+        });
+        requestWakeLock();
+
+        // === เสียสิทธิ์เล่นรอบนี้ถ้าหลุดออกจากเกมกลางรอบ ===
+        function refreshDisconnectHook() {
+            if (!isJoined) return;
+            const roundActive = (gameState.state === 'STARTING' || gameState.state === 'MANUAL_GO');
+            const notYetActed = (myStatus === 'WAITING' || myStatus === 'PRACTICE');
+            const ref = db.ref(`players/${myPlayerId}`);
+
+            if (roundActive && notYetActed) {
+                ref.onDisconnect().update({ connected: false, status: 'LOCKED' });
+            } else {
+                ref.onDisconnect().update({ connected: false });
+            }
+        }
 
         function joinGame() {
             if (joinInProgress || isJoined) return;
 
             const input = document.getElementById('player-name-input');
             const name = input.value.trim();
+            const teamInput = document.getElementById('team-name-input');
+            const team = teamInput.value.trim();
 
             if (!name) {
                 showToast('กรุณากรอกชื่อก่อนเข้าเล่น', 'error');
@@ -164,30 +340,67 @@
                     }
                 }
 
-                myName = name;
-                localStorage.setItem('rt_player_name', name);
-                document.getElementById('display-name').innerText = myName;
+                db.ref('players').once('value', playersSnap => {
+                    const players = playersSnap.val() || {};
+                    const nameTaken = Object.entries(players).some(([id, p]) =>
+                        id !== myPlayerId && (p.name || '').trim().toLowerCase() === name.toLowerCase()
+                    );
 
-                db.ref(`players/${myPlayerId}`).set({
-                    id: myPlayerId,
-                    name: myName,
-                    status: 'WAITING',
-                    time: 0,
-                    joinedAt: now,
-                    connected: true
-                }).then(() => {
-                    isJoined = true;
-                    db.ref(`players/${myPlayerId}`).onDisconnect().update({ connected: false });
+                    if (nameTaken) {
+                        showToast('ชื่อนี้มีผู้เล่นคนอื่นใช้อยู่แล้ว กรุณาตั้งชื่ออื่น', 'error');
+                        joinInProgress = false;
+                        document.getElementById('join-btn').disabled = false;
+                        return;
+                    }
 
-                    document.getElementById('login-screen').style.display = 'none';
-                    document.getElementById('game-screen').style.display = 'flex';
-                    listenToGame();
-                    listenToSelf();
-                    listenToAllPlayers();
-                }).catch(() => {
-                    showToast('เข้าร่วมเกมไม่สำเร็จ กรุณาลองใหม่ (เช็คอินเทอร์เน็ต)', 'error');
-                    joinInProgress = false;
-                    document.getElementById('join-btn').disabled = false;
+                    db.ref('gameState').once('value', gsSnap => {
+                        const gs = gsSnap.val() || {};
+                        const roundInProgress = gs.state === 'STARTING' || gs.state === 'MANUAL_GO';
+                        const initialStatus = roundInProgress ? 'LOCKED' : 'WAITING';
+
+                        myName = name;
+                        localStorage.setItem('rt_player_name', name);
+                        if (team) localStorage.setItem('rt_team_name', team);
+                        document.getElementById('display-name').innerText = myName;
+                        renderTeamLine(team);
+
+                        db.ref(`players/${myPlayerId}`).set({
+                            id: myPlayerId,
+                            name: myName,
+                            status: initialStatus,
+                            time: 0,
+                            joinedAt: now,
+                            connected: true,
+                            avatar: selectedAvatar,
+                            color: selectedColor,
+                            team: team || null,
+                            totalTime: 0,
+                            roundsPlayed: 0,
+                            bestTimeOverall: null,
+                            eliminated: false
+                        }).then(() => {
+                            isJoined = true;
+                            myStatus = initialStatus;
+                            gameState = gs;
+                            refreshDisconnectHook();
+                            requestWakeLock();
+
+                            document.getElementById('login-screen').style.display = 'none';
+                            document.getElementById('game-screen').style.display = 'flex';
+                            listenToGame();
+                            listenToSelf();
+                            listenToAllPlayers();
+                            listenToMessages();
+
+                            if (roundInProgress) {
+                                showToast('รอบนี้เริ่มไปแล้ว กรุณารอรอบถัดไปนะ', 'info', 4000);
+                            }
+                        }).catch(() => {
+                            showToast('เข้าร่วมเกมไม่สำเร็จ กรุณาลองใหม่ (เช็คอินเทอร์เน็ต)', 'error');
+                            joinInProgress = false;
+                            document.getElementById('join-btn').disabled = false;
+                        });
+                    });
                 });
             });
         }
@@ -199,12 +412,19 @@
         function listenToGame() {
             db.ref('gameState').on('value', snap => {
                 const data = snap.val() || {};
-                // สั่นเบาๆ เตือนเมื่อเริ่มรอบใหม่ (ไฟเริ่มติด) ให้ผู้เล่นรู้ตัวแม้ไม่ได้มองจอ
-                if (data.state === 'STARTING' && lastGameStateForVibration !== 'STARTING' && lastGameStateForVibration !== 'MANUAL_GO') {
+
+                if (data.state === 'STARTING' && lastGameStateForVibration !== 'STARTING' && lastGameStateForVibration !== 'MANUAL_GO' && myStatus !== 'LOCKED') {
                     tryVibrate(60, data.vibrationEnabled);
                 }
+
+                if ((data.state === 'STARTING' || data.state === 'MANUAL_GO') && myStatus === 'PRACTICE') {
+                    db.ref(`players/${myPlayerId}`).update({ status: 'LOCKED' });
+                }
+
                 lastGameStateForVibration = data.state;
                 gameState = data;
+                refreshDisconnectHook();
+                renderRoundBadge();
                 updateUI();
             });
         }
@@ -218,13 +438,28 @@
                 }
                 const p = snap.val();
                 if (p) {
+                    const previousStatus = myStatus;
                     myStatus = p.status;
+                    refreshDisconnectHook();
 
-                    // แก้บั๊ก: เดิมไม่เคย sync ชื่อกลับมา ทำให้ host เปลี่ยนชื่อแล้วจอผู้เล่นไม่อัปเดต
                     if (p.name && p.name !== myName) {
                         myName = p.name;
                         document.getElementById('display-name').innerText = myName;
                         localStorage.setItem('rt_player_name', myName);
+                    }
+                    renderTeamLine(p.team);
+
+                    if (myStatus === 'PRACTICE' && previousStatus !== 'PRACTICE') {
+                        showPracticeScreen();
+                    } else if (previousStatus === 'PRACTICE' && myStatus !== 'PRACTICE') {
+                        hidePracticeScreen();
+                    }
+
+                    const cumEl = document.getElementById('status-cumulative');
+                    if (p.roundsPlayed > 0) {
+                        cumEl.textContent = `📊 สะสม: เล่นแล้ว ${p.roundsPlayed} รอบ • เร็วสุด ${p.bestTimeOverall} ms`;
+                    } else {
+                        cumEl.textContent = '';
                     }
 
                     updateUI();
@@ -232,11 +467,21 @@
             });
         }
 
-        // ใช้คำนวณ "อันดับปัจจุบัน" หลังกดสำเร็จ
         function listenToAllPlayers() {
             db.ref('players').on('value', snap => {
                 allPlayers = snap.val() || {};
                 if (myStatus === 'OK') renderRank();
+            });
+        }
+
+        function listenToMessages() {
+            messagesListenStartTime = Date.now() + serverOffset;
+            db.ref('messages').limitToLast(20).on('child_added', snap => {
+                const msg = snap.val();
+                if (!msg) return;
+                if (msg.ts < messagesListenStartTime) return;
+                if (msg.targetId && msg.targetId !== myPlayerId) return;
+                showToast(`📢 ${msg.text}`, 'info', 6000);
             });
         }
 
@@ -258,19 +503,36 @@
             const keyHint = document.getElementById('status-key');
             const rankEl = document.getElementById('status-rank');
             const bestEl = document.getElementById('status-best');
+            const practiceBtn = document.getElementById('practice-btn');
 
             const state = gameState.state || 'WAITING';
 
-            if (state === 'WAITING' && myStatus !== 'WAITING') {
+            if (state === 'WAITING' && myStatus !== 'WAITING' && myStatus !== 'PRACTICE' && myStatus !== 'ELIMINATED') {
                 myStatus = 'WAITING';
             }
 
             const best = getPersonalBest();
             bestEl.textContent = best ? `🏅 สถิติดีที่สุดของคุณ: ${best} ms` : '';
 
+            if (myStatus === 'ELIMINATED') {
+                screen.className = 'game-area eliminated';
+                title.innerText = '❌ คุณถูกคัดออกแล้ว';
+                sub.innerText = 'ขอบคุณที่ร่วมสนุกนะ! เชียร์คนที่เหลือต่อได้เลย';
+                keyHint.style.display = 'none';
+                rankEl.style.display = 'none';
+                practiceBtn.style.display = 'none';
+                return;
+            }
+
+            if (myStatus === 'PRACTICE') {
+                practiceBtn.style.display = 'none';
+                return;
+            }
+
             if (myStatus === 'OK') {
                 screen.className = 'game-area go';
                 keyHint.style.display = 'none';
+                practiceBtn.style.display = 'none';
                 renderRank();
                 return;
             }
@@ -280,6 +542,16 @@
                 sub.innerText = 'กดก่อนไฟดับ (ฟาวล์)';
                 keyHint.style.display = 'none';
                 rankEl.style.display = 'none';
+                practiceBtn.style.display = 'none';
+                return;
+            }
+            if (myStatus === 'LOCKED') {
+                screen.className = 'game-area waiting';
+                title.innerText = '🔒 รอบนี้เริ่มไปแล้ว';
+                sub.innerText = 'กรุณารอเริ่มรอบถัดไปนะ';
+                keyHint.style.display = 'none';
+                rankEl.style.display = 'none';
+                practiceBtn.style.display = 'none';
                 return;
             }
 
@@ -290,15 +562,18 @@
                 screen.className = 'game-area waiting';
                 title.innerText = '🏁 เตรียมตัวให้พร้อม รอเริ่มเกม...';
                 sub.innerText = 'เตรียมพร้อมไว้นะ!';
+                practiceBtn.style.display = (gameState.practiceModeEnabled === true) ? 'inline-block' : 'none';
             } else if (state === 'STARTING' || state === 'MANUAL_GO') {
                 screen.className = 'game-area ready';
                 title.innerText = 'READY...';
                 sub.innerText = 'กดเมื่อไฟดับหมด!';
+                practiceBtn.style.display = 'none';
             }
         }
 
         function handleTap() {
-            if (!isJoined || myStatus === 'OK' || myStatus === 'JUMP_START') return;
+            requestWakeLock();
+            if (!isJoined || myStatus === 'OK' || myStatus === 'JUMP_START' || myStatus === 'LOCKED' || myStatus === 'PRACTICE' || myStatus === 'ELIMINATED') return;
 
             const tapTime = Date.now() + serverOffset;
             const state = gameState.state;
@@ -330,9 +605,19 @@
 
                 tryVibrate(isNewBest ? [40, 40, 40] : 40, gameState.vibrationEnabled);
 
+                // สถิติสะสมข้ามรอบ (อิงข้อมูลล่าสุดที่ Firebase ส่งมาให้ผ่าน allPlayers)
+                const mine = allPlayers[myPlayerId] || {};
+                const prevTotal = mine.totalTime || 0;
+                const prevRounds = mine.roundsPlayed || 0;
+                const prevBest = mine.bestTimeOverall;
+                const newBestOverall = (prevBest === null || prevBest === undefined) ? reactionTime : Math.min(prevBest, reactionTime);
+
                 db.ref(`players/${myPlayerId}`).update({
                     status: 'OK',
-                    time: reactionTime
+                    time: reactionTime,
+                    totalTime: prevTotal + reactionTime,
+                    roundsPlayed: prevRounds + 1,
+                    bestTimeOverall: newBestOverall
                 });
             } else {
                 myStatus = 'JUMP_START';
@@ -349,16 +634,91 @@
             }
         }
 
-        // === Spacebar support ===
+        // === Spacebar support (หน้าเล่นหลัก) ===
         document.addEventListener('keydown', function (e) {
             if (e.code !== 'Space' && e.key !== ' ') return;
             const active = document.activeElement;
             if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
             e.preventDefault();
-            if (!isJoined) return;
             if (e.repeat) return;
+
+            if (myStatus === 'PRACTICE') {
+                handlePracticeTap();
+                return;
+            }
+            if (!isJoined) return;
             handleTap();
         });
+
+        /* ============================================================
+           โหมดฝึกซ้อม — ทำงานฝั่ง client ล้วนๆ ไม่กระทบ leaderboard จริง
+           ============================================================ */
+        let practiceSequencer = null;
+        let practiceStartTime = 0;
+        let practiceGoTime = 0;
+
+        function onEnterPractice(e) {
+            e.stopPropagation();
+            if (myStatus !== 'WAITING') return;
+            db.ref(`players/${myPlayerId}`).update({ status: 'PRACTICE' });
+        }
+
+        function exitPracticeMode() {
+            stopPracticeSequence();
+            db.ref(`players/${myPlayerId}`).update({ status: 'WAITING' });
+        }
+
+        function showPracticeScreen() {
+            document.getElementById('game-screen').style.display = 'none';
+            document.getElementById('practice-screen').style.display = 'flex';
+            startPracticeRound();
+        }
+        function hidePracticeScreen() {
+            stopPracticeSequence();
+            document.getElementById('practice-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'flex';
+        }
+
+        function startPracticeRound() {
+            stopPracticeSequence();
+            const lights = ['pl1', 'pl2', 'pl3', 'pl4', 'pl5'].map(id => document.getElementById(id));
+            const now = Date.now();
+            practiceStartTime = now + 400;
+            const rawDelay = Math.floor(Math.random() * 3001) + 100;
+            practiceGoTime = practiceStartTime + 4000 + rawDelay;
+
+            document.getElementById('practice-title').textContent = 'เตรียมตัว...';
+            document.getElementById('practice-result').textContent = '';
+
+            practiceSequencer = createLightSequencer(lights, beeper, () => Date.now());
+            practiceSequencer.run({ state: 'STARTING', startTime: practiceStartTime, goTime: practiceGoTime, mode: 'AUTO' });
+        }
+
+        function stopPracticeSequence() {
+            if (practiceSequencer) {
+                practiceSequencer.resetLights();
+                practiceSequencer = null;
+            }
+        }
+
+        function handlePracticeTap() {
+            if (myStatus !== 'PRACTICE') return;
+            const now = Date.now();
+            if (now < practiceStartTime) return;
+
+            if (now >= practiceGoTime) {
+                const reactionTime = now - practiceGoTime;
+                const label = getSpeedLabel(reactionTime);
+                document.getElementById('practice-title').textContent = `${reactionTime} ms`;
+                document.getElementById('practice-result').textContent = `${label.emoji} ${label.text} — ฝึกซ้อมเฉยๆ ไม่นับคะแนนจริงนะ`;
+            } else {
+                document.getElementById('practice-title').textContent = '🔴 เร็วไปหน่อย!';
+                document.getElementById('practice-result').textContent = 'ลองใหม่อีกครั้งได้เลย (ฝึกซ้อมไม่มีฟาวล์จริง)';
+            }
+            stopPracticeSequence();
+        }
+
+        document.getElementById('practice-screen').addEventListener('click', handlePracticeTap);
     </script>
 </body>
 </html>
