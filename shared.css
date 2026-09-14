@@ -114,3 +114,46 @@ body, input, button, textarea, select {
     width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #444;
     background: #222; color: #fff; font-size: 1rem; margin-bottom: 12px;
 }
+
+/* ===== Avatar / สีประจำตัว (เลือกตอนเข้าร่วม) ===== */
+.picker-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 14px; }
+.avatar-option {
+    width: 44px; height: 44px; border-radius: 50%; font-size: 1.4rem; background: #222;
+    border: 2px solid transparent; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.avatar-option.selected { border-color: var(--color-primary); background: #333; }
+.color-option {
+    width: 32px; height: 32px; border-radius: 50%; cursor: pointer; border: 2px solid transparent;
+}
+.color-option.selected { border-color: #fff; transform: scale(1.15); }
+
+/* ===== ป้ายรอบการแข่งขัน ===== */
+.round-badge {
+    position: fixed; top: 20px; right: 20px; background: rgba(24, 24, 32, 0.85);
+    padding: 10px 18px; border-radius: var(--radius-md); font-weight: 600; font-size: 1rem;
+    border: 1px solid var(--color-border); z-index: 40;
+}
+
+/* ===== แบนเนอร์ประกาศผู้ชนะ (โหมดแพ้คัดออก) ===== */
+.winner-banner {
+    position: fixed; inset: 0; background: rgba(5, 5, 8, 0.92); z-index: 500;
+    display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+}
+.winner-banner.show { display: flex; }
+.winner-banner .trophy { font-size: 5rem; margin-bottom: 10px; }
+.winner-banner .winner-name { font-size: 2.5rem; font-weight: 900; color: var(--color-primary); }
+.winner-banner .winner-sub { font-size: 1.1rem; opacity: 0.8; margin-top: 10px; }
+
+/* ===== ล็อกหน้าด้วย PIN ===== */
+.pin-gate {
+    position: fixed; inset: 0; background: var(--color-bg-deep); z-index: 9000;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; text-align: center; padding: 20px;
+}
+.pin-gate input {
+    width: 200px; padding: 14px; border-radius: 10px; border: 1px solid #444; background: #222; color: #fff;
+    font-size: 1.4rem; text-align: center; letter-spacing: 6px;
+}
+.pin-gate button {
+    padding: 12px 30px; border-radius: 10px; border: none; background: var(--color-primary); color: #000;
+    font-weight: 700; font-size: 1rem; cursor: pointer;
+}
