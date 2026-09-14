@@ -1,0 +1,82 @@
+{
+  "rules": {
+    ".read": true,
+
+    "gameState": {
+      ".write": true,
+      ".validate": "newData.hasChildren(['state'])",
+      "state": { ".validate": "newData.isString() && newData.val().matches(/^(WAITING|STARTING|MANUAL_GO)$/)" },
+      "mode": { ".validate": "newData.isString() && newData.val().matches(/^(AUTO|MANUAL)$/)" },
+      "screenView": { ".validate": "newData.isString() && newData.val().matches(/^(LIGHTS|LEADERBOARD|QR)$/)" },
+      "startTime": { ".validate": "newData.isNumber()" },
+      "goTime": { ".validate": "newData.isNumber()" },
+      "resetAt": { ".validate": "newData.isNumber()" },
+      "currentRound": { ".validate": "newData.isNumber() && newData.val() >= 1" },
+      "totalRounds": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+      "lightsScale": { ".validate": "newData.isNumber() && newData.val() >= 0.5 && newData.val() <= 2" },
+      "lobbyMusicVolume": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
+      "lobbyMusicUrl": { ".validate": "newData.isString() && newData.val().length < 500" },
+      "hostPin": { ".validate": "newData.isString() && newData.val().length < 20" },
+      "aioEnabled": { ".validate": "newData.isBoolean()" },
+      "qrOverlayEnabled": { ".validate": "newData.isBoolean()" },
+      "vibrationEnabled": { ".validate": "newData.isBoolean()" },
+      "practiceModeEnabled": { ".validate": "newData.isBoolean()" },
+      "eliminationModeEnabled": { ".validate": "newData.isBoolean()" },
+      "teamModeEnabled": { ".validate": "newData.isBoolean()" },
+      "teamPodiumEnabled": { ".validate": "newData.isBoolean()" },
+      "lobbyMusicEnabled": { ".validate": "newData.isBoolean()" },
+      "podiumMode": { ".validate": "newData.isString() && newData.val().matches(/^(ANIMATED|INSTANT)$/)" },
+      "$other": { ".validate": false }
+    },
+
+    "players": {
+      "$playerId": {
+        ".write": true,
+        ".validate": "newData.hasChildren(['name', 'status'])",
+        "id": { ".validate": "newData.isString()" },
+        "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 15" },
+        "team": { ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 20)" },
+        "avatar": { ".validate": "newData.isString() && newData.val().length <= 4" },
+        "color": { ".validate": "newData.isString() && newData.val().matches(/^#[0-9a-fA-F]{6}$/)" },
+        "status": { ".validate": "newData.isString() && newData.val().matches(/^(WAITING|STARTING|MANUAL_GO|OK|JUMP_START|LOCKED|PRACTICE|ELIMINATED)$/)" },
+        "time": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "totalTime": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "roundsPlayed": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "bestTimeOverall": { ".validate": "newData.val() == null || newData.isNumber()" },
+        "eliminated": { ".validate": "newData.isBoolean()" },
+        "connected": { ".validate": "newData.isBoolean()" },
+        "joinedAt": { ".validate": "newData.isNumber()" },
+        "$other": { ".validate": false }
+      }
+    },
+
+    "kickedPlayers": {
+      "$playerId": {
+        ".write": true,
+        "kickedAt": { ".validate": "newData.isNumber()" },
+        "name": { ".validate": "newData.isString() && newData.val().length <= 15" },
+        "$other": { ".validate": false }
+      }
+    },
+
+    "messages": {
+      "$messageId": {
+        ".write": true,
+        ".validate": "newData.hasChildren(['text', 'ts'])",
+        "text": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 120" },
+        "targetId": { ".validate": "newData.val() == null || newData.isString()" },
+        "ts": { ".validate": "newData.isNumber()" },
+        "$other": { ".validate": false }
+      }
+    },
+
+    "roundHistory": {
+      "$roundNumber": {
+        ".write": true,
+        "round": { ".validate": "newData.isNumber()" },
+        "timestamp": { ".validate": "newData.isNumber()" },
+        "players": true
+      }
+    }
+  }
+}
