@@ -11,6 +11,13 @@
         h1 { color: var(--color-primary); margin-bottom: 20px; text-align: center; }
         h3 { margin-bottom: 6px; }
         .card { background: var(--color-panel); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 20px; border: 1px solid var(--color-border); }
+
+        details.card > summary { cursor: pointer; font-size: 1.05rem; font-weight: 700; color: var(--color-primary); list-style: none; margin-bottom: 4px; }
+        details.card > summary::-webkit-details-marker { display: none; }
+        details.card > summary::after { content: ' ▾'; opacity: 0.6; }
+        details.card[open] > summary::after { content: ' ▴'; }
+        details.card[open] > summary { margin-bottom: 14px; }
+
         .selector-group { display: flex; gap: 10px; margin-top: 10px; margin-bottom: 15px; flex-wrap: wrap; }
         .select-btn { flex: 1; min-width: 100px; padding: 12px; background: #22222b; color: #888; border: 2px solid #333; border-radius: 10px; cursor: pointer; font-weight: bold; }
         .select-btn.active { background: var(--color-primary); color: black; border-color: var(--color-primary); }
@@ -21,22 +28,28 @@
         .btn-go { background: var(--color-danger); color: white; }
         .btn-reset { background: var(--color-warning); color: white; }
         .btn-secondary { background: #22222b; color: #fff; border: 1px solid #333; }
+        .btn-undo { background: var(--color-blue); color: #fff; }
 
         .config-group { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; background: var(--color-panel-alt); padding: 12px; border-radius: 10px; flex-wrap: wrap; }
-        .config-group input { width: 70px; padding: 8px; border-radius: 6px; border: 1px solid #444; background: #222; color: #fff; text-align: center; font-size: 1rem; }
-        .toggle-box { display: flex; justify-content: space-between; align-items: center; background: var(--color-panel-alt); padding: 12px; border-radius: 10px; margin-bottom: 15px; }
-        .toggle-box + .toggle-box { margin-top: -5px; }
+        .config-group input[type="number"] { width: 70px; padding: 8px; border-radius: 6px; border: 1px solid #444; background: #222; color: #fff; text-align: center; font-size: 1rem; }
+        .config-group input[type="range"] { flex: 1; min-width: 120px; }
+        .config-group input[type="text"], .config-group input[type="password"] { flex: 1; min-width: 160px; padding: 10px; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; }
+        .toggle-box { display: flex; justify-content: space-between; align-items: center; background: var(--color-panel-alt); padding: 12px; border-radius: 10px; margin-bottom: 12px; gap: 12px; }
 
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #2a2a35; }
         th { color: var(--color-primary); }
-        .action-btn { padding: 5px 10px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.85rem; margin-right: 5px; }
+        .action-btn { padding: 5px 10px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.85rem; margin-right: 5px; margin-bottom: 4px; }
         .btn-kick { background: var(--color-danger); color: white; }
         .btn-edit { background: var(--color-blue); color: white; }
+        .btn-msg { background: #8e44ad; color: white; }
+        .btn-team { background: #16a085; color: white; }
         .hint { color: var(--color-danger); font-size: 0.9rem; margin-top: 5px; display: none; }
         .delay-info { color: var(--color-success); font-weight: bold; font-size: 1.1rem; margin-top: 5px; text-align: center; }
         .offline-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #666; margin-left: 6px; }
         .offline-dot.online { background: var(--color-success); }
+        .kick-row { display: flex; gap: 10px; }
+        .kick-row button { flex: 1; }
 
         .qr-row { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
         #host-qr { background: #fff; padding: 10px; border-radius: 10px; width: fit-content; }
@@ -45,6 +58,19 @@
 
         .export-row { display: flex; gap: 10px; }
         .export-row button { flex: 1; }
+
+        .broadcast-row { display: flex; gap: 10px; }
+        .broadcast-row input { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #444; background: #222; color: #fff; font-size: 1rem; }
+        .broadcast-row button { white-space: nowrap; }
+
+        .kbd-hint { font-size: 0.8rem; opacity: 0.55; margin-top: 8px; text-align: center; }
+        kbd { background: #222; border: 1px solid #444; border-radius: 4px; padding: 1px 6px; font-family: monospace; }
+
+        .round-display { text-align: center; font-size: 1.3rem; font-weight: 700; margin-bottom: 14px; }
+        .history-entry { background: var(--color-panel-alt); border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
+        .history-entry .h-title { font-weight: 700; margin-bottom: 6px; }
+        .history-entry .h-line { font-size: 0.85rem; opacity: 0.85; }
+        .caveat { font-size: 0.8rem; color: var(--color-text-dim); margin-top: 8px; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -53,63 +79,27 @@
 </head>
 <body>
 
+    <!-- ล็อกด้วย PIN (ถ้า host ตั้งไว้) -->
+    <div id="pin-gate" class="pin-gate" style="display:none;">
+        <div style="font-size:2.5rem;">🔒</div>
+        <h2>ใส่ PIN เพื่อเข้าแผงควบคุม</h2>
+        <input type="password" id="pin-input" maxlength="10" inputmode="numeric" placeholder="••••">
+        <button onclick="submitPin()">เข้าสู่ระบบ</button>
+    </div>
+
+    <!-- แบนเนอร์ประกาศผู้ชนะ (โหมดแพ้คัดออก) -->
+    <div id="winner-banner" class="winner-banner">
+        <div class="trophy">🏆</div>
+        <div class="winner-name" id="winner-name-text"></div>
+        <div class="winner-sub">ผู้ชนะการแข่งขันแบบแพ้คัดออก!</div>
+        <button class="btn-ctrl btn-secondary" style="margin-top:20px; width:auto; padding:12px 24px;" onclick="document.getElementById('winner-banner').classList.remove('show')">ปิด</button>
+    </div>
+
     <h1>🎛️ แผงควบคุมเกม (Control Panel)</h1>
 
+    <!-- ========== ควบคุมรอบการแข่งขัน (ใช้บ่อยที่สุด อยู่บนสุด) ========== -->
     <div class="card">
-        <h3>🔗 ลิงก์เข้าร่วมเกม</h3>
-        <div class="qr-row">
-            <div id="host-qr"></div>
-            <div class="qr-link-box">
-                <input type="text" id="join-url-box" readonly>
-                <button class="btn-ctrl btn-secondary" style="margin-bottom:0;" onclick="copyJoinUrl()">📋 คัดลอกลิงก์</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="card">
-        <h3>🌐 ระบบสิทธิ์ All In One</h3>
-        <div class="toggle-box">
-            <span>อนุญาตให้ใช้งานหน้า All In One</span>
-            <input type="checkbox" id="aio-toggle" onchange="toggleAIO(this.checked)" style="width:20px; height:20px; cursor:pointer;">
-        </div>
-    </div>
-
-    <div class="card">
-        <h3>📺 โหมดหน้าจอใหญ่ (Screen View)</h3>
-        <div class="selector-group">
-            <button id="view-lights" class="select-btn screen-active" onclick="setScreenView('LIGHTS')">🚦 หน้าสัญญาณไฟ</button>
-            <button id="view-board" class="select-btn" onclick="setScreenView('LEADERBOARD')">🏆 Leaderboard</button>
-            <button id="view-qr" class="select-btn" onclick="setScreenView('QR')">📱 หน้า QR Code</button>
-        </div>
-        <div class="toggle-box">
-            <span>แสดง QR Code ซ้อนทับมุมจอ (ระหว่างหน้าไฟ/Leaderboard)</span>
-            <input type="checkbox" id="qr-overlay-toggle" onchange="toggleQrOverlay(this.checked)" style="width:20px; height:20px; cursor:pointer;">
-        </div>
-        <div class="toggle-box">
-            <span>จำนวนผู้เล่นบนจอใหญ่</span>
-            <span style="opacity:0.6; font-size:0.85rem;">แสดงอัตโนมัติเสมอ</span>
-        </div>
-    </div>
-
-    <div class="card">
-        <h3>🏆 รูปแบบการขึ้น Leaderboard</h3>
-        <div class="selector-group">
-            <button id="podium-animated" class="select-btn active" onclick="setPodiumMode('ANIMATED')">🎬 อนิเมชัน (3→2→1)</button>
-            <button id="podium-instant" class="select-btn" onclick="setPodiumMode('INSTANT')">⚡ ตารางทันที (ประหยัดเวลา)</button>
-        </div>
-    </div>
-
-    <div class="card">
-        <h3>📳 การสั่นมือถือผู้เล่น</h3>
-        <div class="toggle-box">
-            <span>อนุญาตให้สั่น (ผู้เล่นยังปิดเองได้เป็นรายคน)</span>
-            <input type="checkbox" id="vibration-toggle" checked onchange="toggleVibration(this.checked)" style="width:20px; height:20px; cursor:pointer;">
-        </div>
-        <p style="font-size:0.85rem; color:var(--color-text-dim);">ปิดตรงนี้ = ปิดการสั่นของทุกคนพร้อมกัน เพื่อความเท่าเทียม</p>
-    </div>
-
-    <div class="card">
-        <h3>เลือกโหมดและตั้งเวลาดับไฟ</h3>
+        <h3>🎮 ควบคุมรอบการแข่งขัน</h3>
         <div class="selector-group">
             <button id="mode-auto" class="select-btn active" onclick="setMode('AUTO')">⚡ อัตโนมัติ (สุ่มไฟดับ)</button>
             <button id="mode-manual" class="select-btn" onclick="setMode('MANUAL')">🕹️ แมนนวล (กดดับไฟเอง)</button>
@@ -129,17 +119,58 @@
         <p id="screen-hint" class="hint">⚠️ ต้องเปลี่ยนเป็น "หน้าสัญญาณไฟ" และ "รีเซ็ตเกม" ก่อนจึงจะเริ่มได้</p>
 
         <button id="manual-go-btn" class="btn-ctrl btn-go" style="display:none;" onclick="triggerManualGo()" disabled>🔥 ดับไฟแดงทั้งหมด (LIGHTS OUT!)</button>
-        <button class="btn-ctrl btn-reset" onclick="resetGame()">🔄 รีเซ็ตเกมทั้งหมด</button>
+        <button class="btn-ctrl btn-reset" onclick="resetGame()">🔄 รีเซ็ตเกมทั้งหมด (ล้างทุกอย่าง เริ่มรอบ 1 ใหม่)</button>
 
         <div id="delay-display" class="delay-info"></div>
+
+        <button id="undo-btn" class="btn-ctrl btn-undo" style="display:none;" onclick="undoLastAction()">
+            <span id="undo-label">↩️ เมื่อกี้พลาด? กดคืนค่า</span>
+        </button>
+
+        <p class="kbd-hint">⌨️ <kbd>Space</kbd> = เริ่ม &nbsp; <kbd>R</kbd> = รีเซ็ต &nbsp; <kbd>Z</kbd> = Undo (ใช้ได้เมื่อไม่ได้โฟกัสช่องพิมพ์)</p>
     </div>
 
+    <!-- ========== ระบบหลายรอบ / แพ้คัดออก / ทีม ========== -->
+    <div class="card">
+        <h3>🏁 ระบบหลายรอบ / แพ้คัดออก / ทีม</h3>
+        <div class="round-display" id="round-display">รอบที่ 1</div>
+
+        <div class="config-group">
+            <label>จำนวนรอบทั้งหมด (0 = ไม่จำกัด):</label>
+            <input type="number" id="total-rounds-input" value="0" min="0" onchange="setTotalRounds(this.value)">
+        </div>
+
+        <div class="toggle-box">
+            <span>💀 โหมดแพ้คัดออก (ตัดครึ่งที่ช้าสุดทุกครั้งที่ไปรอบถัดไป)</span>
+            <input type="checkbox" id="elimination-toggle" onchange="toggleElimination(this.checked)" style="width:20px; height:20px; cursor:pointer;">
+        </div>
+
+        <div class="toggle-box">
+            <span>🏷️ เปิดใช้งานทีม (ผู้เล่นตั้งชื่อทีมตอนเข้าร่วมได้)</span>
+            <input type="checkbox" id="team-mode-toggle" onchange="toggleTeamMode(this.checked)" style="width:20px; height:20px; cursor:pointer;">
+        </div>
+        <div class="toggle-box">
+            <span>🏆 แสดง Leaderboard แบบทีม (แทนรายบุคคล)</span>
+            <input type="checkbox" id="team-podium-toggle" onchange="toggleTeamPodium(this.checked)" style="width:20px; height:20px; cursor:pointer;">
+        </div>
+
+        <button class="btn-ctrl btn-start" onclick="nextRound()">▶️ จบรอบนี้ บันทึกผล แล้วไปรอบถัดไป</button>
+        <button class="btn-ctrl btn-secondary" onclick="toggleHistoryPanel()">📜 ดูประวัติแต่ละรอบ</button>
+        <div id="history-panel" style="display:none; margin-top:12px;"></div>
+    </div>
+
+    <!-- ========== สรุปผล + ผู้เล่น ========== -->
     <div class="card">
         <h3>📊 สรุปผลรอบนี้</h3>
         <div class="stat-card-row">
             <div class="stat-card"><div class="stat-value" id="stat-fastest">-</div><div class="stat-label">เร็วที่สุด (ms)</div></div>
             <div class="stat-card"><div class="stat-value" id="stat-average">-</div><div class="stat-label">เฉลี่ย (ms)</div></div>
             <div class="stat-card"><div class="stat-value" id="stat-fouls">0</div><div class="stat-label">คนฟาวล์</div></div>
+        </div>
+        <h3 style="margin-top:14px;">📈 สถิติสะสมทั้งงาน</h3>
+        <div class="stat-card-row">
+            <div class="stat-card"><div class="stat-value" id="stat-fastest-cum">-</div><div class="stat-label">เร็วที่สุดสะสม (ms)</div></div>
+            <div class="stat-card"><div class="stat-value" id="stat-average-cum">-</div><div class="stat-label">เฉลี่ยสะสมทุกคน (ms)</div></div>
         </div>
         <div class="export-row">
             <button class="btn-ctrl btn-secondary" onclick="copyResults()">📋 คัดลอกผลลัพธ์</button>
@@ -150,7 +181,10 @@
     <div class="card">
         <h3>ผู้เล่นทั้งหมดในห้อง (<span id="player-count">0</span>)</h3>
         <input type="text" id="player-search" class="search-input" placeholder="🔍 ค้นหาชื่อผู้เล่น..." oninput="renderPlayerTable()">
-        <button class="btn-ctrl btn-secondary" onclick="kickAllOffline()">🧹 เตะผู้เล่นออฟไลน์ทั้งหมด</button>
+        <div class="kick-row">
+            <button class="btn-ctrl btn-secondary" onclick="kickAllOffline()">🧹 เตะออฟไลน์ทั้งหมด</button>
+            <button class="btn-ctrl btn-secondary" onclick="kickAllOnline()">🚪 เตะออนไลน์ทั้งหมด (เคลียร์ห้อง)</button>
+        </div>
         <table>
             <thead>
                 <tr>
@@ -164,6 +198,102 @@
         </table>
     </div>
 
+    <!-- ========== ข้อความถึงผู้เล่น ========== -->
+    <div class="card">
+        <h3>💬 ส่งข้อความถึงผู้เล่น</h3>
+        <div class="broadcast-row">
+            <input type="text" id="broadcast-input" placeholder="พิมพ์ข้อความถึงทุกคน..." maxlength="120">
+            <button class="btn-ctrl btn-secondary" style="margin-bottom:0; width:auto;" onclick="broadcastMessage()">📢 ส่งถึงทุกคน</button>
+        </div>
+        <p style="font-size:0.8rem; color:var(--color-text-dim); margin-top:8px;">ส่งถึงคนเดียวได้จากปุ่ม 💬 ในตารางผู้เล่นด้านบน</p>
+    </div>
+
+    <!-- ========== เพลงลอบบี้ ========== -->
+    <details class="card">
+        <summary>🎵 เพลงลอบบี้ & เอฟเฟกต์เสียง</summary>
+        <div class="toggle-box">
+            <span>เปิดเพลงลอบบี้ระหว่างรอเริ่มเกม (หยุดอัตโนมัติตอนไฟเริ่มติด)</span>
+            <input type="checkbox" id="music-toggle" onchange="toggleLobbyMusic(this.checked)" style="width:20px; height:20px; cursor:pointer;">
+        </div>
+        <div class="config-group">
+            <label style="width:100%;">ลิงก์ไฟล์เพลง (MP3 ที่เล่นตรงได้):</label>
+            <input type="text" id="music-url-input" placeholder="https://..." onchange="setLobbyMusicUrl(this.value)">
+        </div>
+        <div class="config-group">
+            <label style="width:100%;">ระดับเสียง:</label>
+            <input type="range" id="music-volume" min="0" max="100" value="50" oninput="setLobbyMusicVolume(this.value)">
+            <span id="music-volume-label">50%</span>
+        </div>
+        <p class="caveat">⚠️ กรุณาใช้เพลงที่มีลิขสิทธิ์ถูกต้อง/royalty-free เท่านั้น เสียงกลองรัวตอนเผย Leaderboard เป็นเสียงสังเคราะห์ในตัว ไม่ต้องตั้งค่าเพิ่ม</p>
+    </details>
+
+    <!-- ========== การตั้งค่าห้อง/หน้าจอ (พับเก็บได้ ไม่ค่อยต้องแก้ระหว่างเล่น) ========== -->
+    <details class="card" open>
+        <summary>⚙️ การตั้งค่าห้อง/หน้าจอ</summary>
+
+        <div class="toggle-box">
+            <span>🌐 อนุญาตให้ใช้งานหน้า All In One</span>
+            <input type="checkbox" id="aio-toggle" onchange="toggleAIO(this.checked)" style="width:20px; height:20px; cursor:pointer;">
+        </div>
+
+        <div class="toggle-box">
+            <span>🎯 อนุญาตโหมดฝึกซ้อม (ผู้เล่นกดฝึกเองได้)</span>
+            <input type="checkbox" id="practice-toggle" onchange="togglePracticeMode(this.checked)" style="width:20px; height:20px; cursor:pointer;">
+        </div>
+        <button class="btn-ctrl btn-secondary" onclick="forceExitPractice()">📤 บังคับทุกคนออกจากโหมดฝึกซ้อม</button>
+
+        <div class="toggle-box">
+            <span>📳 อนุญาตให้สั่น (ผู้เล่นยังปิดเองได้เป็นรายคน)</span>
+            <input type="checkbox" id="vibration-toggle" checked onchange="toggleVibration(this.checked)" style="width:20px; height:20px; cursor:pointer;">
+        </div>
+
+        <h3 style="margin-top:18px;">📺 โหมดหน้าจอใหญ่ (Screen View)</h3>
+        <div class="selector-group">
+            <button id="view-lights" class="select-btn screen-active" onclick="setScreenView('LIGHTS')">🚦 หน้าสัญญาณไฟ</button>
+            <button id="view-board" class="select-btn" onclick="setScreenView('LEADERBOARD')">🏆 Leaderboard</button>
+            <button id="view-qr" class="select-btn" onclick="setScreenView('QR')">📱 หน้า QR Code</button>
+        </div>
+        <div class="toggle-box">
+            <span>แสดง QR Code ซ้อนทับมุมจอ (ระหว่างหน้าไฟ/Leaderboard)</span>
+            <input type="checkbox" id="qr-overlay-toggle" onchange="toggleQrOverlay(this.checked)" style="width:20px; height:20px; cursor:pointer;">
+        </div>
+
+        <div class="config-group">
+            <label style="width:100%;">📏 ขนาดไฟบนจอใหญ่:</label>
+            <input type="range" id="lights-scale" min="0.6" max="1.8" step="0.1" value="1" oninput="setLightsScale(this.value)">
+            <span id="lights-scale-label">100%</span>
+        </div>
+
+        <h3 style="margin-top:18px;">🏆 รูปแบบการขึ้น Leaderboard</h3>
+        <div class="selector-group">
+            <button id="podium-animated" class="select-btn active" onclick="setPodiumMode('ANIMATED')">🎬 อนิเมชัน (3→2→1)</button>
+            <button id="podium-instant" class="select-btn" onclick="setPodiumMode('INSTANT')">⚡ ตารางทันที (ประหยัดเวลา)</button>
+        </div>
+    </details>
+
+    <!-- ========== ความปลอดภัย ========== -->
+    <details class="card">
+        <summary>🔒 ความปลอดภัย</summary>
+        <div class="config-group">
+            <label style="width:100%;">ตั้ง PIN ป้องกันหน้านี้ (เว้นว่าง = ไม่ล็อก):</label>
+            <input type="password" id="host-pin-setting" placeholder="ใส่ PIN ใหม่...">
+            <button class="btn-ctrl btn-secondary" style="margin-bottom:0; width:auto;" onclick="saveHostPin()">บันทึก</button>
+        </div>
+        <p class="caveat">⚠️ PIN นี้เป็นแค่ตัวกันคนทั่วไปที่บังเอิญได้ลิงก์หน้านี้ไป ไม่ใช่ระบบความปลอดภัยระดับสูง เพราะ PIN ถูกเก็บแบบไม่เข้ารหัสใน Firebase — ถ้าต้องการความปลอดภัยจริงจัง ต้องตั้งค่า Firebase Security Rules เพิ่มเติม (ดูไฟล์ firebase-rules.json ที่แนบมาด้วย)</p>
+    </details>
+
+    <!-- ========== ลิงก์เข้าร่วม / QR (พับเก็บได้ ใช้ตอนเริ่มงานครั้งเดียว) ========== -->
+    <details class="card">
+        <summary>🔗 ลิงก์เข้าร่วมเกม / QR Code</summary>
+        <div class="qr-row">
+            <div id="host-qr"></div>
+            <div class="qr-link-box">
+                <input type="text" id="join-url-box" readonly>
+                <button class="btn-ctrl btn-secondary" style="margin-bottom:0;" onclick="copyJoinUrl()">📋 คัดลอกลิงก์</button>
+            </div>
+        </div>
+    </details>
+
     <script>
         const db = initFirebase();
 
@@ -172,12 +302,27 @@
         let currentPodiumMode = 'ANIMATED';
         let currentVibrationEnabled = true;
         let currentQrOverlay = false;
+        let currentPracticeModeEnabled = false;
+        let currentLightsScale = 1;
+        let currentRound = 1;
+        let totalRounds = 0;
+        let eliminationModeEnabled = false;
+        let teamModeEnabled = false;
+        let teamPodiumEnabled = false;
+        let lobbyMusicEnabled = false;
+        let lobbyMusicUrl = '';
+        let lobbyMusicVolume = 50;
+        let hostPinValue = '';
         let isGameRunning = false;
         let isResetDone = true;
         let serverOffset = 0;
         let manualUnlockTimer = null;
         let latestPlayers = {};
         let progressAnimFrame = null;
+        let lastAction = null;
+        let undoTimer = null;
+        let winnerBannerShownForRound = false;
+        let historyPanelOpen = false;
 
         showLoadingOverlay('กำลังเชื่อมต่อ...');
         let firstLoad = true;
@@ -186,6 +331,36 @@
             if (firstLoad) { firstLoad = false; hideLoadingOverlay(); }
         });
         setTimeout(() => { if (firstLoad) { firstLoad = false; hideLoadingOverlay(); } }, 4000);
+
+        // === PIN gate ===
+        db.ref('gameState/hostPin').on('value', snap => {
+            hostPinValue = snap.val() || '';
+            checkPinGate();
+        });
+        function checkPinGate() {
+            const gate = document.getElementById('pin-gate');
+            if (!hostPinValue) { gate.style.display = 'none'; return; }
+            const authed = sessionStorage.getItem('rt_host_authed') === hostPinValue;
+            gate.style.display = authed ? 'none' : 'flex';
+        }
+        function submitPin() {
+            const val = document.getElementById('pin-input').value.trim();
+            if (val && val === hostPinValue) {
+                sessionStorage.setItem('rt_host_authed', val);
+                checkPinGate();
+                showToast('เข้าสู่ระบบสำเร็จ', 'success');
+            } else {
+                showToast('PIN ไม่ถูกต้อง', 'error');
+            }
+        }
+        function saveHostPin() {
+            const val = document.getElementById('host-pin-setting').value.trim();
+            db.ref('gameState/hostPin').set(val).then(() => {
+                if (val) sessionStorage.setItem('rt_host_authed', val);
+                showToast(val ? 'ตั้ง PIN แล้ว' : 'ปิดการล็อก PIN แล้ว', 'success');
+                document.getElementById('host-pin-setting').value = '';
+            });
+        }
 
         // === QR ลิงก์เข้าร่วม ===
         document.getElementById('join-url-box').value = getJoinUrl();
@@ -221,12 +396,200 @@
         }
 
         db.ref('gameState/vibrationEnabled').on('value', snap => {
-            currentVibrationEnabled = snap.val() !== false; // ค่าเริ่มต้น = true
+            currentVibrationEnabled = snap.val() !== false;
             document.getElementById('vibration-toggle').checked = currentVibrationEnabled;
         });
         function toggleVibration(enabled) {
             currentVibrationEnabled = enabled;
             db.ref('gameState/vibrationEnabled').set(enabled);
+        }
+
+        db.ref('gameState/practiceModeEnabled').on('value', snap => {
+            currentPracticeModeEnabled = snap.val() === true;
+            document.getElementById('practice-toggle').checked = currentPracticeModeEnabled;
+        });
+        function togglePracticeMode(enabled) {
+            currentPracticeModeEnabled = enabled;
+            db.ref('gameState/practiceModeEnabled').set(enabled);
+        }
+        function forceExitPractice() {
+            const inPractice = Object.entries(latestPlayers).filter(([, p]) => p.status === 'PRACTICE');
+            if (!inPractice.length) { showToast('ไม่มีใครอยู่ในโหมดฝึกซ้อมตอนนี้', 'info'); return; }
+            inPractice.forEach(([id]) => db.ref(`players/${id}`).update({ status: 'WAITING' }));
+            showToast(`บังคับผู้เล่น ${inPractice.length} คนออกจากโหมดฝึกซ้อมแล้ว`, 'success');
+        }
+
+        db.ref('gameState/lightsScale').on('value', snap => {
+            currentLightsScale = snap.val() || 1;
+            document.getElementById('lights-scale').value = currentLightsScale;
+            document.getElementById('lights-scale-label').textContent = Math.round(currentLightsScale * 100) + '%';
+        });
+        function setLightsScale(val) {
+            currentLightsScale = parseFloat(val);
+            document.getElementById('lights-scale-label').textContent = Math.round(currentLightsScale * 100) + '%';
+            db.ref('gameState/lightsScale').set(currentLightsScale);
+        }
+
+        // === ระบบหลายรอบ / แพ้คัดออก / ทีม ===
+        db.ref('gameState/currentRound').on('value', snap => {
+            currentRound = snap.val() || 1;
+            renderRoundDisplay();
+        });
+        db.ref('gameState/totalRounds').on('value', snap => {
+            totalRounds = snap.val() || 0;
+            document.getElementById('total-rounds-input').value = totalRounds;
+            renderRoundDisplay();
+        });
+        function renderRoundDisplay() {
+            document.getElementById('round-display').textContent = `🏁 รอบที่ ${currentRound}` + (totalRounds > 0 ? ` / ${totalRounds}` : '');
+        }
+        function setTotalRounds(val) {
+            totalRounds = parseInt(val, 10) || 0;
+            db.ref('gameState/totalRounds').set(totalRounds);
+        }
+
+        db.ref('gameState/eliminationModeEnabled').on('value', snap => {
+            eliminationModeEnabled = snap.val() === true;
+            document.getElementById('elimination-toggle').checked = eliminationModeEnabled;
+        });
+        function toggleElimination(enabled) {
+            eliminationModeEnabled = enabled;
+            db.ref('gameState/eliminationModeEnabled').set(enabled);
+        }
+
+        db.ref('gameState/teamModeEnabled').on('value', snap => {
+            teamModeEnabled = snap.val() === true;
+            document.getElementById('team-mode-toggle').checked = teamModeEnabled;
+            renderPlayerTable();
+        });
+        function toggleTeamMode(enabled) {
+            teamModeEnabled = enabled;
+            db.ref('gameState/teamModeEnabled').set(enabled);
+        }
+        db.ref('gameState/teamPodiumEnabled').on('value', snap => {
+            teamPodiumEnabled = snap.val() === true;
+            document.getElementById('team-podium-toggle').checked = teamPodiumEnabled;
+        });
+        function toggleTeamPodium(enabled) {
+            teamPodiumEnabled = enabled;
+            db.ref('gameState/teamPodiumEnabled').set(enabled);
+        }
+
+        function nextRound() {
+            if (!confirm(`จบรอบที่ ${currentRound} แล้วไปรอบถัดไป? ผลของรอบนี้จะถูกบันทึกไว้ในประวัติ`)) return;
+
+            const snapshot = JSON.parse(JSON.stringify(latestPlayers));
+            db.ref(`roundHistory/${currentRound}`).set({
+                round: currentRound,
+                timestamp: Date.now() + serverOffset,
+                players: snapshot
+            });
+
+            if (eliminationModeEnabled) {
+                const survivors = sortPlayersForLeaderboard(latestPlayers).filter(p => !p.eliminated);
+                const keepCount = Math.max(1, Math.ceil(survivors.length / 2));
+                survivors.forEach((p, i) => {
+                    if (i >= keepCount) {
+                        db.ref(`players/${p.id}`).update({ eliminated: true, status: 'ELIMINATED', time: 0 });
+                    } else {
+                        db.ref(`players/${p.id}`).update({ status: 'WAITING', time: 0 });
+                    }
+                });
+            } else {
+                Object.keys(latestPlayers).forEach(key => {
+                    db.ref(`players/${key}`).update({ status: 'WAITING', time: 0 });
+                });
+            }
+
+            const nextRoundNum = currentRound + 1;
+            if (totalRounds > 0 && nextRoundNum > totalRounds) {
+                showToast('ครบจำนวนรอบที่ตั้งไว้แล้ว! ยังกด "จบรอบนี้" ต่อได้ถ้าอยากเล่นเพิ่ม', 'info', 5000);
+            }
+            db.ref('gameState/currentRound').set(nextRoundNum);
+            db.ref('gameState').update({ state: 'WAITING', resetAt: Date.now() + serverOffset });
+
+            winnerBannerShownForRound = false;
+            showToast(`บันทึกรอบที่ ${currentRound} แล้ว เริ่มรอบที่ ${nextRoundNum}`, 'success');
+            isGameRunning = false;
+            isResetDone = true;
+            checkControlState();
+        }
+
+        function toggleHistoryPanel() {
+            historyPanelOpen = !historyPanelOpen;
+            document.getElementById('history-panel').style.display = historyPanelOpen ? 'block' : 'none';
+            if (historyPanelOpen) loadHistoryPanel();
+        }
+        function loadHistoryPanel() {
+            db.ref('roundHistory').once('value', snap => {
+                const history = snap.val() || {};
+                const panel = document.getElementById('history-panel');
+                panel.innerHTML = '';
+                const rounds = Object.keys(history).map(Number).sort((a, b) => b - a);
+                if (!rounds.length) {
+                    panel.innerHTML = '<p style="opacity:0.6; font-size:0.9rem;">ยังไม่มีประวัติรอบที่ผ่านมา</p>';
+                    return;
+                }
+                rounds.forEach(r => {
+                    const roundData = history[r];
+                    const box = document.createElement('div');
+                    box.className = 'history-entry';
+                    const title = document.createElement('div');
+                    title.className = 'h-title';
+                    title.textContent = `รอบที่ ${r}`;
+                    box.appendChild(title);
+                    const list = sortPlayersForLeaderboard(roundData.players || {}).slice(0, 5);
+                    list.forEach((p, i) => {
+                        const line = document.createElement('div');
+                        line.className = 'h-line';
+                        const timeStr = p.status === 'OK' ? `${p.time} ms` : (p.status === 'JUMP_START' ? 'ฟาวล์' : '-');
+                        line.textContent = `${i + 1}. ${p.name}: ${timeStr}`;
+                        box.appendChild(line);
+                    });
+                    panel.appendChild(box);
+                });
+            });
+        }
+
+        function checkWinner() {
+            if (!eliminationModeEnabled) return;
+            const list = Object.values(latestPlayers);
+            if (list.length < 2) return;
+            const survivors = list.filter(p => !p.eliminated);
+            if (survivors.length === 1 && !winnerBannerShownForRound) {
+                winnerBannerShownForRound = true;
+                document.getElementById('winner-name-text').textContent = `${survivors[0].avatar || ''} ${survivors[0].name}`;
+                document.getElementById('winner-banner').classList.add('show');
+            }
+        }
+
+        // === เพลงลอบบี้ ===
+        db.ref('gameState/lobbyMusicEnabled').on('value', snap => {
+            lobbyMusicEnabled = snap.val() === true;
+            document.getElementById('music-toggle').checked = lobbyMusicEnabled;
+        });
+        function toggleLobbyMusic(enabled) {
+            lobbyMusicEnabled = enabled;
+            db.ref('gameState/lobbyMusicEnabled').set(enabled);
+        }
+        db.ref('gameState/lobbyMusicUrl').on('value', snap => {
+            lobbyMusicUrl = snap.val() || '';
+            document.getElementById('music-url-input').value = lobbyMusicUrl;
+        });
+        function setLobbyMusicUrl(val) {
+            lobbyMusicUrl = val.trim();
+            db.ref('gameState/lobbyMusicUrl').set(lobbyMusicUrl);
+        }
+        db.ref('gameState/lobbyMusicVolume').on('value', snap => {
+            const v = snap.val();
+            lobbyMusicVolume = (v === undefined || v === null) ? 50 : v;
+            document.getElementById('music-volume').value = lobbyMusicVolume;
+            document.getElementById('music-volume-label').textContent = lobbyMusicVolume + '%';
+        });
+        function setLobbyMusicVolume(val) {
+            lobbyMusicVolume = parseInt(val, 10);
+            document.getElementById('music-volume-label').textContent = lobbyMusicVolume + '%';
+            db.ref('gameState/lobbyMusicVolume').set(lobbyMusicVolume);
         }
 
         function checkControlState() {
@@ -259,6 +622,26 @@
             db.ref('gameState/mode').set(mode);
         }
 
+        // ฟิลด์การตั้งค่าทั้งหมดที่ต้องแนบไปด้วยทุกครั้งที่เขียนทับ gameState ทั้งก้อน (.set) กัน setting หายตอน Start/Reset
+        function buildFullGameStateSettings() {
+            return {
+                aioEnabled: document.getElementById('aio-toggle').checked,
+                qrOverlayEnabled: currentQrOverlay,
+                podiumMode: currentPodiumMode,
+                vibrationEnabled: currentVibrationEnabled,
+                practiceModeEnabled: currentPracticeModeEnabled,
+                lightsScale: currentLightsScale,
+                totalRounds: totalRounds,
+                eliminationModeEnabled: eliminationModeEnabled,
+                teamModeEnabled: teamModeEnabled,
+                teamPodiumEnabled: teamPodiumEnabled,
+                lobbyMusicEnabled: lobbyMusicEnabled,
+                lobbyMusicUrl: lobbyMusicUrl,
+                lobbyMusicVolume: lobbyMusicVolume,
+                hostPin: hostPinValue
+            };
+        }
+
         function startSequence() {
             if (currentScreen !== 'LIGHTS' || !isResetDone || isGameRunning) return;
 
@@ -285,17 +668,14 @@
                 document.getElementById('delay-display').innerText = '';
             }
 
-            db.ref('gameState').set({
+            db.ref('gameState').set(Object.assign({
                 state: 'STARTING',
                 startTime: sequenceStartTime,
                 goTime: targetGoTime,
                 mode: currentMode,
                 screenView: 'LIGHTS',
-                aioEnabled: document.getElementById('aio-toggle').checked,
-                qrOverlayEnabled: currentQrOverlay,
-                podiumMode: currentPodiumMode,
-                vibrationEnabled: currentVibrationEnabled
-            }).then(() => {
+                currentRound: currentRound
+            }, buildFullGameStateSettings())).then(() => {
                 startProgressBar(sequenceStartTime, currentMode, targetGoTime);
             }).catch(() => {
                 showToast('เริ่มเกมไม่สำเร็จ กรุณาเช็คอินเทอร์เน็ตแล้วลองใหม่', 'error');
@@ -314,7 +694,6 @@
             }
         }
 
-        // === Progress bar 5 ช่อง ระหว่าง STARTING ให้ host เห็นไฟติดกี่ดวงโดยไม่ต้องมองจอใหญ่ ===
         function startProgressBar(startTime, mode, goTime) {
             const wrap = document.getElementById('progress-bar');
             const segs = wrap.querySelectorAll('.progress-seg');
@@ -350,7 +729,7 @@
         }
 
         function resetGame() {
-            if (!confirm('ยืนยันรีเซ็ตเกมทั้งหมด? สถานะและเวลาของผู้เล่นทุกคนในรอบนี้จะถูกล้าง')) return;
+            if (!confirm('ยืนยันรีเซ็ตเกมทั้งหมด? สถานะ/คะแนนของผู้เล่นทุกคนในรอบนี้จะถูกล้าง และกลับไปเริ่มที่รอบ 1 (แต่ประวัติรอบก่อนหน้ายังอยู่)')) return;
 
             if (manualUnlockTimer) clearTimeout(manualUnlockTimer);
             if (progressAnimFrame) cancelAnimationFrame(progressAnimFrame);
@@ -364,33 +743,82 @@
             manualBtn.style.display = (currentMode === 'MANUAL') ? 'block' : 'none';
             manualBtn.disabled = true;
 
-            db.ref('gameState').set({
+            const playersBackup = JSON.parse(JSON.stringify(latestPlayers));
+            currentRound = 1;
+            winnerBannerShownForRound = false;
+
+            db.ref('gameState').set(Object.assign({
                 state: 'WAITING',
                 mode: currentMode,
                 screenView: currentScreen,
                 resetAt: Date.now() + serverOffset,
-                aioEnabled: document.getElementById('aio-toggle').checked,
-                qrOverlayEnabled: currentQrOverlay,
-                podiumMode: currentPodiumMode,
-                vibrationEnabled: currentVibrationEnabled
-            });
+                currentRound: 1
+            }, buildFullGameStateSettings()));
 
             db.ref('players').once('value', snapshot => {
                 const players = snapshot.val();
                 for (let key in players) {
-                    db.ref(`players/${key}`).update({ status: 'WAITING', time: 0 });
+                    db.ref(`players/${key}`).update({
+                        status: 'WAITING', time: 0, eliminated: false,
+                        totalTime: 0, roundsPlayed: 0, bestTimeOverall: null
+                    });
                 }
             });
 
             checkControlState();
-            showToast('รีเซ็ตเกมแล้ว', 'success');
+            showToast('รีเซ็ตเกมแล้ว กลับไปรอบที่ 1', 'success');
+            setLastAction({ type: 'reset', players: playersBackup, label: '↩️ คืนค่ารอบก่อนหน้า (จากการรีเซ็ต)' });
         }
+
+        // === Undo การกระทำล่าสุด (เตะผิดคน / รีเซ็ตผิดจังหวะ) ===
+        function setLastAction(action) {
+            lastAction = action;
+            document.getElementById('undo-btn').style.display = 'block';
+            document.getElementById('undo-label').textContent = action.label;
+            if (undoTimer) clearTimeout(undoTimer);
+            undoTimer = setTimeout(clearLastAction, 15000);
+        }
+        function clearLastAction() {
+            lastAction = null;
+            document.getElementById('undo-btn').style.display = 'none';
+            if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
+        }
+        function undoLastAction() {
+            if (!lastAction) return;
+            if (lastAction.type === 'kick') {
+                if (lastAction.playerData) db.ref(`players/${lastAction.playerId}`).set(lastAction.playerData);
+                db.ref(`kickedPlayers/${lastAction.playerId}`).remove();
+                showToast('คืนค่าผู้เล่นที่เตะไปแล้ว', 'success');
+            } else if (lastAction.type === 'reset') {
+                Object.entries(lastAction.players || {}).forEach(([id, p]) => {
+                    db.ref(`players/${id}`).set(p);
+                });
+                showToast('คืนค่าผลของรอบก่อนหน้าแล้ว', 'success');
+            }
+            clearLastAction();
+        }
+
+        // === Keyboard shortcuts ===
+        document.addEventListener('keydown', e => {
+            const tag = (document.activeElement && document.activeElement.tagName) || '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (!document.getElementById('start-btn').disabled) startSequence();
+            } else if (e.key === 'r' || e.key === 'R') {
+                resetGame();
+            } else if (e.key === 'z' || e.key === 'Z') {
+                if (lastAction) undoLastAction();
+            }
+        });
 
         // === รายชื่อผู้เล่น + ค้นหา + สถิติ ===
         db.ref('players').on('value', snapshot => {
             latestPlayers = snapshot.val() || {};
             renderPlayerTable();
             renderStats();
+            checkWinner();
         });
 
         function renderPlayerTable() {
@@ -408,17 +836,25 @@
                 if (p.status === 'OK') statusText = '🟢 สำเร็จ';
                 else if (p.status === 'JUMP_START') statusText = '🔴 JUMP START (ฟาวล์)';
                 else if (p.status === 'LOCKED') statusText = '🔒 มาไม่ทันรอบนี้';
+                else if (p.status === 'PRACTICE') statusText = '🎯 กำลังฝึกซ้อม';
+                else if (p.status === 'ELIMINATED') statusText = '❌ ถูกคัดออก';
 
                 const tr = document.createElement('tr');
 
                 const nameTd = document.createElement('td');
                 const nameStrong = document.createElement('strong');
-                nameStrong.textContent = p.name || '(ไม่มีชื่อ)';
+                nameStrong.textContent = (p.avatar ? p.avatar + ' ' : '') + (p.name || '(ไม่มีชื่อ)');
                 nameTd.appendChild(nameStrong);
                 const dot = document.createElement('span');
                 dot.className = 'offline-dot' + (p.connected !== false ? ' online' : '');
                 dot.title = (p.connected !== false) ? 'ออนไลน์' : 'ขาดการเชื่อมต่อ';
                 nameTd.appendChild(dot);
+                if (teamModeEnabled && p.team) {
+                    const teamSmall = document.createElement('div');
+                    teamSmall.style.cssText = 'font-size:0.75rem; opacity:0.6;';
+                    teamSmall.textContent = `🏷️ ${p.team}`;
+                    nameTd.appendChild(teamSmall);
+                }
 
                 const statusTd = document.createElement('td');
                 statusTd.textContent = statusText;
@@ -429,13 +865,23 @@
                 const actionTd = document.createElement('td');
                 const editBtn = document.createElement('button');
                 editBtn.className = 'action-btn btn-edit';
-                editBtn.textContent = '✏️ เปลี่ยนชื่อ';
+                editBtn.textContent = '✏️ ชื่อ';
                 editBtn.onclick = () => editPlayer(key, p.name);
+                const teamBtn = document.createElement('button');
+                teamBtn.className = 'action-btn btn-team';
+                teamBtn.textContent = '🏷️ ทีม';
+                teamBtn.onclick = () => setPlayerTeam(key, p.team, p.name);
+                const msgBtn = document.createElement('button');
+                msgBtn.className = 'action-btn btn-msg';
+                msgBtn.textContent = '💬 ข้อความ';
+                msgBtn.onclick = () => messagePlayer(key, p.name);
                 const kickBtn = document.createElement('button');
                 kickBtn.className = 'action-btn btn-kick';
                 kickBtn.textContent = '🚫 เตะ';
                 kickBtn.onclick = () => kickPlayer(key, p.name);
                 actionTd.appendChild(editBtn);
+                actionTd.appendChild(teamBtn);
+                actionTd.appendChild(msgBtn);
                 actionTd.appendChild(kickBtn);
 
                 tr.appendChild(nameTd);
@@ -455,24 +901,49 @@
             document.getElementById('stat-fastest').textContent = okList.length ? Math.min(...okList.map(p => p.time)) : '-';
             document.getElementById('stat-average').textContent = okList.length ? Math.round(okList.reduce((a, p) => a + p.time, 0) / okList.length) : '-';
             document.getElementById('stat-fouls').textContent = foulCount;
+
+            const withBest = list.filter(p => p.bestTimeOverall !== null && p.bestTimeOverall !== undefined);
+            const withRounds = list.filter(p => p.roundsPlayed > 0);
+            document.getElementById('stat-fastest-cum').textContent = withBest.length ? Math.min(...withBest.map(p => p.bestTimeOverall)) : '-';
+            document.getElementById('stat-average-cum').textContent = withRounds.length
+                ? Math.round(withRounds.reduce((a, p) => a + (p.totalTime / p.roundsPlayed), 0) / withRounds.length)
+                : '-';
         }
 
         function editPlayer(playerId, oldName) {
             const newName = prompt("ใส่ชื่อใหม่สำหรับผู้เล่นนี้:", oldName);
             if (newName && newName.trim() !== "" && newName.trim() !== oldName) {
                 const cleanName = newName.trim();
+                const nameTaken = Object.entries(latestPlayers).some(([id, p]) =>
+                    id !== playerId && (p.name || '').trim().toLowerCase() === cleanName.toLowerCase()
+                );
+                if (nameTaken) {
+                    showToast(`ชื่อ "${cleanName}" มีผู้เล่นคนอื่นใช้อยู่แล้ว กรุณาตั้งชื่ออื่น`, 'error');
+                    return;
+                }
                 db.ref(`players/${playerId}`).update({ name: cleanName })
                     .then(() => showToast(`เปลี่ยนชื่อเป็น "${cleanName}" แล้ว`, 'success'))
                     .catch(() => showToast('เปลี่ยนชื่อไม่สำเร็จ กรุณาลองใหม่ (เช็คอินเทอร์เน็ต)', 'error'));
             }
         }
 
+        function setPlayerTeam(playerId, oldTeam, name) {
+            const newTeam = prompt(`ตั้งชื่อทีมให้ "${name}" (เว้นว่างเพื่อลบทีม):`, oldTeam || '');
+            if (newTeam === null) return;
+            db.ref(`players/${playerId}`).update({ team: newTeam.trim() || null })
+                .then(() => showToast(`ตั้งทีมให้ "${name}" แล้ว`, 'success'));
+        }
+
         function kickPlayer(playerId, name) {
             if (confirm(`คุณต้องการเตะผู้เล่น "${name}" ออกจากห้องใช่หรือไม่?`)) {
                 const now = Date.now() + serverOffset;
+                const backup = latestPlayers[playerId];
                 db.ref(`kickedPlayers/${playerId}`).set({ kickedAt: now, name: name })
                     .then(() => db.ref(`players/${playerId}`).remove())
-                    .then(() => showToast(`เตะ "${name}" ออกจากห้องแล้ว`, 'success'));
+                    .then(() => {
+                        showToast(`เตะ "${name}" ออกจากห้องแล้ว`, 'success');
+                        setLastAction({ type: 'kick', playerId, playerData: backup, label: `↩️ คืนค่า "${name}" (จากการเตะ)` });
+                    });
             }
         }
 
@@ -485,6 +956,40 @@
             if (!confirm(`ลบผู้เล่นที่ออฟไลน์ทั้งหมด ${offlineEntries.length} คนออกจากห้อง?`)) return;
             offlineEntries.forEach(([key]) => db.ref(`players/${key}`).remove());
             showToast(`ลบผู้เล่นออฟไลน์ ${offlineEntries.length} คนแล้ว`, 'success');
+        }
+
+        function kickAllOnline() {
+            const onlineEntries = Object.entries(latestPlayers).filter(([, p]) => p.connected !== false);
+            if (onlineEntries.length === 0) {
+                showToast('ไม่มีผู้เล่นออนไลน์อยู่ตอนนี้', 'info');
+                return;
+            }
+            if (!confirm(`เตะผู้เล่นออนไลน์ทั้งหมด ${onlineEntries.length} คน เพื่อเคลียร์ห้องใช่ไหม?`)) return;
+            const now = Date.now() + serverOffset;
+            onlineEntries.forEach(([key, p]) => {
+                db.ref(`kickedPlayers/${key}`).set({ kickedAt: now, name: p.name });
+                db.ref(`players/${key}`).remove();
+            });
+            showToast(`เตะผู้เล่นออนไลน์ ${onlineEntries.length} คนแล้ว (เคลียร์ห้อง)`, 'success');
+        }
+
+        // === ข้อความถึงผู้เล่น ===
+        function broadcastMessage() {
+            const input = document.getElementById('broadcast-input');
+            const text = input.value.trim();
+            if (!text) { showToast('พิมพ์ข้อความก่อนส่ง', 'error'); return; }
+            const now = Date.now() + serverOffset;
+            db.ref('messages').push({ text, targetId: null, ts: now })
+                .then(() => { showToast('ส่งข้อความถึงทุกคนแล้ว 📢', 'success'); input.value = ''; })
+                .catch(() => showToast('ส่งไม่สำเร็จ กรุณาลองใหม่', 'error'));
+        }
+        function messagePlayer(playerId, name) {
+            const text = prompt(`พิมพ์ข้อความถึง "${name}":`);
+            if (!text || !text.trim()) return;
+            const now = Date.now() + serverOffset;
+            db.ref('messages').push({ text: text.trim(), targetId: playerId, ts: now })
+                .then(() => showToast(`ส่งข้อความถึง "${name}" แล้ว`, 'success'))
+                .catch(() => showToast('ส่งไม่สำเร็จ กรุณาลองใหม่', 'error'));
         }
 
         // === Export ผลลัพธ์ ===
@@ -508,11 +1013,11 @@
         function downloadResultsCsv() {
             const list = buildResultsList();
             if (!list.length) { showToast('ยังไม่มีข้อมูลผู้เล่น', 'error'); return; }
-            let csv = 'อันดับ,ชื่อ,เวลา (ms),สถานะ\n';
+            let csv = 'อันดับ,ชื่อ,ทีม,เวลา (ms),สถานะ,เล่นสะสม (รอบ),เร็วสุดสะสม (ms)\n';
             list.forEach((p, i) => {
                 const rank = p.status === 'OK' ? (i + 1) : '-';
                 const time = p.status === 'OK' ? p.time : '';
-                csv += `${rank},"${(p.name || '').replace(/"/g, '""')}",${time},${p.status}\n`;
+                csv += `${rank},"${(p.name || '').replace(/"/g, '""')}","${(p.team || '').replace(/"/g, '""')}",${time},${p.status},${p.roundsPlayed || 0},${p.bestTimeOverall != null ? p.bestTimeOverall : ''}\n`;
             });
             const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
