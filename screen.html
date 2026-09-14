@@ -9,7 +9,7 @@
         body { background: #050508; color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 100vh; overflow: hidden; padding: 20px; }
 
         #lights-view { display: none; justify-content: center; align-items: center; }
-        .light-board { display: flex; gap: 20px; background: #111; padding: 40px 50px; border-radius: 24px; border: 4px solid #222; box-shadow: 0 0 60px rgba(0,0,0,0.9); }
+        .light-board { display: flex; gap: 20px; background: #111; padding: 40px 50px; border-radius: 24px; border: 4px solid #222; box-shadow: 0 0 60px rgba(0,0,0,0.9); transition: transform 0.2s ease; }
         .light-column { display: flex; flex-direction: column; gap: 20px; background: #000; padding: 18px; border-radius: 16px; }
         .light { width: 90px; height: 90px; border-radius: 50%; background: #222; box-shadow: inset 0 0 10px rgba(0,0,0,0.8); }
         .light.red { background: #ff0000; box-shadow: 0 0 45px #ff0000, inset 0 0 10px #fff; }
@@ -49,8 +49,17 @@
         <small>เบราว์เซอร์ต้องการการแตะหนึ่งครั้งก่อนจึงจะเล่นเสียงได้</small>
     </div>
 
+    <audio id="lobby-music" loop></audio>
+
+    <div class="round-badge" id="round-badge" style="display:none;"></div>
     <div class="player-count-badge" id="player-count-badge">👥 ผู้เล่น: 0 คน</div>
     <button class="fullscreen-btn" onclick="toggleFullscreen()" title="เต็มจอ">⛶</button>
+
+    <div id="winner-banner" class="winner-banner">
+        <div class="trophy">🏆</div>
+        <div class="winner-name" id="winner-name-text"></div>
+        <div class="winner-sub">ผู้ชนะการแข่งขันแบบแพ้คัดออก!</div>
+    </div>
 
     <div id="lights-view">
         <div class="light-board">
@@ -63,7 +72,7 @@
     </div>
 
     <div id="board-view">
-        <h1 class="board-title">🏆 LEADERBOARD</h1>
+        <h1 class="board-title" id="board-title-text">🏆 LEADERBOARD</h1>
         <div id="podium-row" class="podium-wrap"></div>
         <table class="leaderboard-table">
             <thead>
@@ -98,19 +107,23 @@
         let playersLoaded = false;
         let pendingLeaderboardReveal = false;
         let currentPodiumMode = 'ANIMATED';
+        let teamPodiumEnabled = false;
+        let eliminationModeEnabled = false;
+        let winnerBannerShownForRound = false;
+        let lastRoundSeen = 1;
 
         showLoadingOverlay('กำลังเชื่อมต่อ...');
         setTimeout(() => { if (firstGameStateLoad) { firstGameStateLoad = false; hideLoadingOverlay(); } }, 5000);
 
         db.ref('.info/serverTimeOffset').on('value', snap => { serverOffset = snap.val() || 0; });
 
-        // ปลดล็อกเสียง
+        // ปลดล็อกเสียง + เริ่มเพลงลอบบี้ (ต้องมี user gesture ก่อนเช่นกัน)
         document.getElementById('sound-unlock').addEventListener('click', function () {
             beeper.unlock();
             this.style.display = 'none';
+            tryPlayLobbyMusic();
         }, { once: true });
 
-        // เรนเดอร์ QR ครั้งเดียวตอนโหลด (ลิงก์ไม่เปลี่ยน ไม่ต้องเรนเดอร์ซ้ำทุกครั้งที่ข้อมูลอัปเดต)
         renderQrCode('screen-qr-code', 260);
         renderQrCode('qr-overlay-code', 110);
         document.getElementById('qr-view-url').textContent = getJoinUrl();
@@ -124,6 +137,45 @@
             beeper
         });
 
+        // === เพลงลอบบี้ ===
+        const musicEl = document.getElementById('lobby-music');
+        let lobbyMusicEnabled = false;
+        let lobbyMusicUrl = '';
+        function tryPlayLobbyMusic() {
+            if (!lobbyMusicEnabled || !lobbyMusicUrl) return;
+            musicEl.play().catch(() => { /* ยังไม่ได้ unlock เสียง จะลองใหม่ตอนแตะจอ */ });
+        }
+        function updateLobbyMusicState(gameData) {
+            lobbyMusicEnabled = gameData.lobbyMusicEnabled === true;
+            const newUrl = gameData.lobbyMusicUrl || '';
+            if (newUrl !== lobbyMusicUrl) {
+                lobbyMusicUrl = newUrl;
+                musicEl.src = lobbyMusicUrl;
+            }
+            musicEl.volume = (gameData.lobbyMusicVolume != null ? gameData.lobbyMusicVolume : 50) / 100;
+
+            const shouldPlay = lobbyMusicEnabled && lobbyMusicUrl && gameData.state === 'WAITING';
+            if (shouldPlay) {
+                tryPlayLobbyMusic();
+            } else {
+                musicEl.pause();
+            }
+        }
+
+        // === แบนเนอร์ผู้ชนะ (โหมดแพ้คัดออก) ===
+        function checkWinnerBanner() {
+            if (!eliminationModeEnabled) return;
+            const list = Object.values(latestPlayers);
+            if (list.length < 2) return;
+            const survivors = list.filter(p => !p.eliminated);
+            if (survivors.length === 1 && !winnerBannerShownForRound) {
+                winnerBannerShownForRound = true;
+                document.getElementById('winner-name-text').textContent = `${survivors[0].avatar || ''} ${survivors[0].name}`;
+                document.getElementById('winner-banner').classList.add('show');
+                fireConfettiSafe();
+            }
+        }
+
         db.ref('gameState').on('value', snapshot => {
             const data = snapshot.val();
             if (!data) return;
@@ -133,9 +185,33 @@
             // ไฟ 5 ดวง
             if (data.state === 'WAITING') {
                 sequencer.resetLights();
+                document.getElementById('winner-banner').classList.remove('show');
             } else {
                 sequencer.run(data);
             }
+
+            document.querySelector('.light-board').style.transform = `scale(${data.lightsScale || 1})`;
+
+            // ป้ายรอบ
+            const round = data.currentRound || 1;
+            const total = data.totalRounds || 0;
+            if (round !== lastRoundSeen) {
+                lastRoundSeen = round;
+                winnerBannerShownForRound = false; // รอบใหม่เริ่ม เผื่อมีผู้ชนะใหม่ให้ประกาศได้อีก
+            }
+            const roundBadge = document.getElementById('round-badge');
+            if (round > 1 || total > 0) {
+                roundBadge.style.display = 'block';
+                roundBadge.textContent = `🏁 รอบที่ ${round}` + (total > 0 ? ` / ${total}` : '');
+            } else {
+                roundBadge.style.display = 'none';
+            }
+
+            updateLobbyMusicState(data);
+
+            eliminationModeEnabled = data.eliminationModeEnabled === true;
+            teamPodiumEnabled = data.teamPodiumEnabled === true;
+            document.getElementById('board-title-text').textContent = teamPodiumEnabled ? '🏆 LEADERBOARD (ทีม)' : '🏆 LEADERBOARD';
 
             // สลับหน้าจอหลัก
             const viewMode = data.screenView || 'LIGHTS';
@@ -143,24 +219,35 @@
             document.getElementById('board-view').style.display = (viewMode === 'LEADERBOARD') ? 'flex' : 'none';
             document.getElementById('qr-view').style.display = (viewMode === 'QR') ? 'flex' : 'none';
 
-            // QR ซ้อนทับมุมจอ — โชว์เฉพาะตอนไม่ได้อยู่หน้า QR หลักอยู่แล้ว และ host เปิดใช้งานไว้
             const qrOverlayOn = data.qrOverlayEnabled === true && viewMode !== 'QR';
             document.getElementById('qr-overlay').style.display = qrOverlayOn ? 'block' : 'none';
 
             currentPodiumMode = data.podiumMode || 'ANIMATED';
 
-            // เข้าสู่หน้า LEADERBOARD ใหม่ (transition) → เล่นอนิเมชัน podium ตาม podiumMode ที่ host ตั้งไว้
             if (viewMode === 'LEADERBOARD' && lastScreenView !== 'LEADERBOARD') {
                 if (playersLoaded) {
-                    leaderboardController.reveal(latestPlayers, currentPodiumMode);
+                    revealLeaderboardNow();
                 } else {
-                    // แก้บั๊ก race condition: ข้อมูลผู้เล่นยังมาไม่ถึง (เช่น เพิ่ง refresh จอกลางงานตรงหน้า leaderboard พอดี)
-                    // รอให้ players/ มาถึงก่อนค่อย reveal แทนที่จะ reveal ด้วยข้อมูลว่างเปล่า
                     pendingLeaderboardReveal = true;
                 }
             }
             lastScreenView = viewMode;
         });
+
+        function revealLeaderboardNow() {
+            if (teamPodiumEnabled) {
+                leaderboardController.revealTeams(latestPlayers, currentPodiumMode);
+            } else {
+                leaderboardController.reveal(latestPlayers, currentPodiumMode);
+            }
+        }
+        function refreshLeaderboardNow() {
+            if (teamPodiumEnabled) {
+                leaderboardController.refreshTeamTableOnly(latestPlayers);
+            } else {
+                leaderboardController.refreshTableOnly(latestPlayers);
+            }
+        }
 
         db.ref('players').on('value', snapshot => {
             latestPlayers = snapshot.val() || {};
@@ -169,11 +256,12 @@
 
             if (pendingLeaderboardReveal) {
                 pendingLeaderboardReveal = false;
-                leaderboardController.reveal(latestPlayers, currentPodiumMode);
+                revealLeaderboardNow();
             } else if (lastScreenView === 'LEADERBOARD') {
-                // ถ้าอยู่หน้า leaderboard อยู่แล้ว แค่รีเฟรชตาราง+ชื่อบน podium ไม่เล่นอนิเมชัน podium ซ้ำทุกครั้งที่คะแนนขยับ
-                leaderboardController.refreshTableOnly(latestPlayers);
+                refreshLeaderboardNow();
             }
+
+            checkWinnerBanner();
         });
     </script>
 </body>
