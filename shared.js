@@ -154,12 +154,6 @@ function getSpeedLabel(ms) {
 }
 
 /* ============================================================
-   Avatar / สีประจำตัว — เลือกตอนเข้าร่วม
-   ============================================================ */
-const AVATAR_OPTIONS = ['🦊', '🐱', '🐼', '🦁', '🐸', '🐵', '🦄', '🐯', '🐨', '🐰'];
-const COLOR_OPTIONS = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#1abc9c', '#3498db', '#9b59b6', '#e84393'];
-
-/* ============================================================
    ผู้เล่น: จัดเรียง / หาอันดับ
    ============================================================ */
 function sortPlayersForLeaderboard(playersObj) {
@@ -178,8 +172,9 @@ function computeMyRank(playersObj, myId) {
     return idx === -1 ? null : idx + 1;
 }
 
-/** จัดกลุ่มผู้เล่นเป็นทีม พร้อมคำนวณเวลาเฉลี่ย/ดีที่สุดของแต่ละทีม (สำหรับโหมดทีม) */
-function computeTeamRankings(playersObj) {
+/** จัดกลุ่มผู้เล่นเป็นทีม พร้อมคำนวณเวลาเฉลี่ย/ดีที่สุดของแต่ละทีม
+ *  rankMethod: 'AVERAGE' (ค่าเริ่มต้น) จัดอันดับตามเวลาเฉลี่ยของทีม, 'FASTEST' จัดอันดับตามคนที่เร็วที่สุดในทีม */
+function computeTeamRankings(playersObj, rankMethod) {
     const teams = {};
     Object.values(playersObj || {}).forEach(p => {
         const teamName = (p.team || '').trim() || 'ไม่มีทีม';
@@ -194,10 +189,11 @@ function computeTeamRankings(playersObj) {
         avgTime: t.okTimes.length ? Math.round(t.okTimes.reduce((a, b) => a + b, 0) / t.okTimes.length) : null,
         bestTime: t.okTimes.length ? Math.min(...t.okTimes) : null
     }));
+    const metric = rankMethod === 'FASTEST' ? 'bestTime' : 'avgTime';
     teamList.sort((a, b) => {
-        if (a.avgTime !== null && b.avgTime !== null) return a.avgTime - b.avgTime;
-        if (a.avgTime !== null) return -1;
-        if (b.avgTime !== null) return 1;
+        if (a[metric] !== null && b[metric] !== null) return a[metric] - b[metric];
+        if (a[metric] !== null) return -1;
+        if (b[metric] !== null) return 1;
         return 0;
     });
     return teamList;
@@ -414,7 +410,12 @@ function createLeaderboardController({ podiumRowEl, tableBodyEl, beeper }) {
     }
 
     /* ---------- โหมดทีม ---------- */
-    function renderTeamPodiumBlock(t, rank) {
+    function teamMetricText(t, rankMethod) {
+        const val = rankMethod === 'FASTEST' ? t.bestTime : t.avgTime;
+        if (val === null) return 'ยังไม่มีผล';
+        return (rankMethod === 'FASTEST' ? 'เร็วที่สุด ' : 'เฉลี่ย ') + val + ' ms';
+    }
+    function renderTeamPodiumBlock(t, rank, rankMethod) {
         const block = document.createElement('div');
         block.className = 'podium-block podium-rank-' + rank;
         block.dataset.team = t.team;
@@ -426,14 +427,14 @@ function createLeaderboardController({ podiumRowEl, tableBodyEl, beeper }) {
         name.textContent = `🏷️ ${t.team}`;
         const time = document.createElement('div');
         time.className = 'podium-time';
-        time.textContent = t.avgTime !== null ? `เฉลี่ย ${t.avgTime} ms` : 'ยังไม่มีผล';
+        time.textContent = teamMetricText(t, rankMethod);
         const bar = document.createElement('div');
         bar.className = 'podium-bar podium-bar-' + rank;
         bar.textContent = rank;
         block.appendChild(medal); block.appendChild(name); block.appendChild(time); block.appendChild(bar);
         podiumRowEl.appendChild(block);
     }
-    function renderTeamRestTable(teamList, startRank, animate) {
+    function renderTeamRestTable(teamList, startRank, animate, rankMethod) {
         tableBodyEl.innerHTML = '';
         teamList.forEach((t, i) => {
             const rank = startRank + i;
@@ -447,14 +448,15 @@ function createLeaderboardController({ podiumRowEl, tableBodyEl, beeper }) {
             nameTd.textContent = `🏷️ ${t.team} (${t.members.length} คน)`;
             const timeTd = document.createElement('td');
             timeTd.className = 'time-col';
-            timeTd.textContent = t.avgTime !== null ? `เฉลี่ย ${t.avgTime} ms` : 'ยังไม่มีผล';
+            timeTd.textContent = teamMetricText(t, rankMethod);
             tr.appendChild(rankTd); tr.appendChild(nameTd); tr.appendChild(timeTd);
             tableBodyEl.appendChild(tr);
         });
     }
-    function revealTeams(playersObj, mode) {
-        const teamList = computeTeamRankings(playersObj);
-        const top3 = teamList.slice(0, 3).filter(t => t.avgTime !== null);
+    function revealTeams(playersObj, mode, rankMethod) {
+        const teamList = computeTeamRankings(playersObj, rankMethod);
+        const metricKey = rankMethod === 'FASTEST' ? 'bestTime' : 'avgTime';
+        const top3 = teamList.slice(0, 3).filter(t => t[metricKey] !== null);
         const top3Names = new Set(top3.map(t => t.team));
         const rest = teamList.filter(t => !top3Names.has(t.team));
         const restStartRank = top3.length + 1;
@@ -463,8 +465,8 @@ function createLeaderboardController({ podiumRowEl, tableBodyEl, beeper }) {
         tableBodyEl.innerHTML = '';
 
         if (mode !== 'ANIMATED' || top3.length === 0) {
-            top3.forEach((t, i) => renderTeamPodiumBlock(t, i + 1));
-            renderTeamRestTable(rest, restStartRank, true);
+            top3.forEach((t, i) => renderTeamPodiumBlock(t, i + 1, rankMethod));
+            renderTeamRestTable(rest, restStartRank, true, rankMethod);
             if (top3.length) fireConfettiSafe();
             return;
         }
@@ -474,23 +476,23 @@ function createLeaderboardController({ podiumRowEl, tableBodyEl, beeper }) {
         const startDelay = 1400;
         revealOrder.forEach((rank, seq) => {
             setTimeout(() => {
-                renderTeamPodiumBlock(top3[rank - 1], rank);
+                renderTeamPodiumBlock(top3[rank - 1], rank, rankMethod);
                 beeper.play(rank === 1 ? 880 : 600, 'sine', 0.25);
                 if (rank === 1) fireConfettiSafe();
             }, startDelay + seq * 900);
         });
-        setTimeout(() => renderTeamRestTable(rest, restStartRank, true), startDelay + revealOrder.length * 900 + 400);
+        setTimeout(() => renderTeamRestTable(rest, restStartRank, true, rankMethod), startDelay + revealOrder.length * 900 + 400);
     }
-    function refreshTeamTableOnly(playersObj) {
-        const teamList = computeTeamRankings(playersObj);
+    function refreshTeamTableOnly(playersObj, rankMethod) {
+        const teamList = computeTeamRankings(playersObj, rankMethod);
         const shownTop3 = podiumRowEl.children.length;
-        renderTeamRestTable(teamList.slice(shownTop3), shownTop3 + 1, false);
+        renderTeamRestTable(teamList.slice(shownTop3), shownTop3 + 1, false, rankMethod);
         const blocks = podiumRowEl.querySelectorAll('.podium-block');
         blocks.forEach((block) => {
             const t = teamList.find(x => x.team === block.dataset.team);
             if (!t) return;
             const timeEl = block.querySelector('.podium-time');
-            if (timeEl) timeEl.textContent = t.avgTime !== null ? `เฉลี่ย ${t.avgTime} ms` : 'ยังไม่มีผล';
+            if (timeEl) timeEl.textContent = teamMetricText(t, rankMethod);
         });
     }
 
