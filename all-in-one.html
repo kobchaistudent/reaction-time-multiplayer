@@ -63,7 +63,7 @@
     <div class="player-count-badge" id="player-count-badge">👥 ผู้เล่น: 0 คน</div>
     <button class="fullscreen-btn" onclick="toggleFullscreen()" title="เต็มจอ">⛶</button>
 
-    <div id="winner-banner" class="winner-banner">
+    <div id="winner-banner" class="winner-banner" style="display:none;">
         <div class="trophy">🏆</div>
         <div class="winner-name" id="winner-name-text"></div>
         <div class="winner-sub">ผู้ชนะการแข่งขันแบบแพ้คัดออก!</div>
@@ -125,7 +125,8 @@
         let currentTotalRounds = 0;
         let currentEliminationModeEnabled = false;
         let currentTeamModeEnabled = false;
-        let currentTeamPodiumEnabled = false;
+        let currentTeamRankMethod = 'AVERAGE';
+        let currentTeamCapacity = 0;
         let currentLobbyMusicEnabled = false;
         let currentLobbyMusicUrl = '';
         let currentLobbyMusicVolume = 50;
@@ -186,8 +187,8 @@
             const survivors = list.filter(p => !p.eliminated);
             if (survivors.length === 1 && !winnerBannerShownForRound) {
                 winnerBannerShownForRound = true;
-                document.getElementById('winner-name-text').textContent = `${survivors[0].avatar || ''} ${survivors[0].name}`;
-                document.getElementById('winner-banner').classList.add('show');
+                document.getElementById('winner-name-text').textContent = survivors[0].name;
+                document.getElementById('winner-banner').style.display = 'flex';
                 fireConfettiSafe();
             }
         }
@@ -210,7 +211,8 @@
                 totalRounds: currentTotalRounds,
                 eliminationModeEnabled: currentEliminationModeEnabled,
                 teamModeEnabled: currentTeamModeEnabled,
-                teamPodiumEnabled: currentTeamPodiumEnabled,
+                teamRankMethod: currentTeamRankMethod,
+                teamCapacity: currentTeamCapacity,
                 lobbyMusicEnabled: currentLobbyMusicEnabled,
                 lobbyMusicUrl: currentLobbyMusicUrl,
                 lobbyMusicVolume: currentLobbyMusicVolume,
@@ -266,15 +268,15 @@
         });
 
         function revealLeaderboardNow() {
-            if (currentTeamPodiumEnabled) {
-                leaderboardController.revealTeams(latestPlayers, currentPodiumMode);
+            if (currentTeamModeEnabled) {
+                leaderboardController.revealTeams(latestPlayers, currentPodiumMode, currentTeamRankMethod);
             } else {
                 leaderboardController.reveal(latestPlayers, currentPodiumMode);
             }
         }
         function refreshLeaderboardNow() {
-            if (currentTeamPodiumEnabled) {
-                leaderboardController.refreshTeamTableOnly(latestPlayers);
+            if (currentTeamModeEnabled) {
+                leaderboardController.refreshTeamTableOnly(latestPlayers, currentTeamRankMethod);
             } else {
                 leaderboardController.refreshTableOnly(latestPlayers);
             }
@@ -294,10 +296,11 @@
             currentTotalRounds = data.totalRounds || 0;
             currentEliminationModeEnabled = data.eliminationModeEnabled === true;
             currentTeamModeEnabled = data.teamModeEnabled === true;
-            currentTeamPodiumEnabled = data.teamPodiumEnabled === true;
+            currentTeamRankMethod = data.teamRankMethod || 'AVERAGE';
+            currentTeamCapacity = data.teamCapacity || 0;
             currentHostPin = data.hostPin || '';
             document.querySelector('.light-board').style.transform = `scale(${currentLightsScale})`;
-            document.getElementById('board-title-text').textContent = currentTeamPodiumEnabled ? '🏆 LEADERBOARD (ทีม)' : '🏆 LEADERBOARD';
+            document.getElementById('board-title-text').textContent = currentTeamModeEnabled ? '🏆 LEADERBOARD (ทีม)' : '🏆 LEADERBOARD';
 
             updateLobbyMusicState(data);
 
@@ -318,7 +321,7 @@
                 isGameRunning = false;
                 sequencer.resetLights();
                 document.getElementById('start-auto-btn').disabled = false;
-                document.getElementById('winner-banner').classList.remove('show');
+                document.getElementById('winner-banner').style.display = 'none';
             } else {
                 isGameRunning = true;
                 document.getElementById('start-auto-btn').disabled = true;
