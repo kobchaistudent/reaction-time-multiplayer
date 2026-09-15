@@ -115,18 +115,6 @@ body, input, button, textarea, select {
     background: #222; color: #fff; font-size: 1rem; margin-bottom: 12px;
 }
 
-/* ===== Avatar / สีประจำตัว (เลือกตอนเข้าร่วม) ===== */
-.picker-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 14px; }
-.avatar-option {
-    width: 44px; height: 44px; border-radius: 50%; font-size: 1.4rem; background: #222;
-    border: 2px solid transparent; cursor: pointer; display: flex; align-items: center; justify-content: center;
-}
-.avatar-option.selected { border-color: var(--color-primary); background: #333; }
-.color-option {
-    width: 32px; height: 32px; border-radius: 50%; cursor: pointer; border: 2px solid transparent;
-}
-.color-option.selected { border-color: #fff; transform: scale(1.15); }
-
 /* ===== ป้ายรอบการแข่งขัน ===== */
 .round-badge {
     position: fixed; top: 20px; right: 20px; background: rgba(24, 24, 32, 0.85);
