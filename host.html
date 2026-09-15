@@ -71,6 +71,13 @@
         .history-entry .h-title { font-weight: 700; margin-bottom: 6px; }
         .history-entry .h-line { font-size: 0.85rem; opacity: 0.85; }
         .caveat { font-size: 0.8rem; color: var(--color-text-dim); margin-top: 8px; }
+
+        .team-row { display: flex; justify-content: space-between; align-items: center; background: var(--color-panel-alt); padding: 10px 14px; border-radius: 8px; margin-bottom: 6px; }
+        .team-row .t-name { font-weight: 600; }
+
+        .modal-select { padding: 14px; border-radius: 10px; font-size: 1.05rem; min-width: 220px; background: #222; color: #fff; border: 1px solid #444; }
+        .modal-btn-row { display: flex; gap: 10px; }
+        .modal-btn-row button { padding: 12px 24px; border-radius: 10px; border: none; font-weight: 700; cursor: pointer; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -87,12 +94,22 @@
         <button onclick="submitPin()">เข้าสู่ระบบ</button>
     </div>
 
-    <!-- แบนเนอร์ประกาศผู้ชนะ (โหมดแพ้คัดออก) -->
-    <div id="winner-banner" class="winner-banner">
+    <!-- แบนเนอร์ประกาศผู้ชนะ (โหมดแพ้คัดออก) — ซ่อนด้วย inline style เสมอ ไม่พึ่ง CSS ภายนอกอย่างเดียว -->
+    <div id="winner-banner" class="winner-banner" style="display:none;">
         <div class="trophy">🏆</div>
         <div class="winner-name" id="winner-name-text"></div>
         <div class="winner-sub">ผู้ชนะการแข่งขันแบบแพ้คัดออก!</div>
-        <button class="btn-ctrl btn-secondary" style="margin-top:20px; width:auto; padding:12px 24px;" onclick="document.getElementById('winner-banner').classList.remove('show')">ปิด</button>
+        <button class="btn-ctrl btn-secondary" style="margin-top:20px; width:auto; padding:12px 24px;" onclick="closeWinnerBanner()">ปิด</button>
+    </div>
+
+    <!-- โมดัลเลือกทีมให้ผู้เล่น -->
+    <div id="team-assign-modal" class="pin-gate" style="display:none;">
+        <h2 id="team-assign-title">เลือกทีม</h2>
+        <select id="team-assign-select" class="modal-select"></select>
+        <div class="modal-btn-row">
+            <button style="background:var(--color-success); color:#fff;" onclick="confirmTeamAssign()">ยืนยัน</button>
+            <button style="background:#444; color:#fff;" onclick="closeTeamAssignModal()">ยกเลิก</button>
+        </div>
     </div>
 
     <h1>🎛️ แผงควบคุมเกม (Control Panel)</h1>
@@ -119,7 +136,7 @@
         <p id="screen-hint" class="hint">⚠️ ต้องเปลี่ยนเป็น "หน้าสัญญาณไฟ" และ "รีเซ็ตเกม" ก่อนจึงจะเริ่มได้</p>
 
         <button id="manual-go-btn" class="btn-ctrl btn-go" style="display:none;" onclick="triggerManualGo()" disabled>🔥 ดับไฟแดงทั้งหมด (LIGHTS OUT!)</button>
-        <button class="btn-ctrl btn-reset" onclick="resetGame()">🔄 รีเซ็ตเกมทั้งหมด (ล้างทุกอย่าง เริ่มรอบ 1 ใหม่)</button>
+        <button class="btn-ctrl btn-reset" onclick="resetGame()">🔄 รีเซ็ตรอบนี้ (ลองใหม่ ไม่เปลี่ยนเลขรอบ/คะแนนสะสม)</button>
 
         <div id="delay-display" class="delay-info"></div>
 
@@ -132,7 +149,7 @@
 
     <!-- ========== ระบบหลายรอบ / แพ้คัดออก / ทีม ========== -->
     <div class="card">
-        <h3>🏁 ระบบหลายรอบ / แพ้คัดออก / ทีม</h3>
+        <h3>🏁 ระบบหลายรอบ / แพ้คัดออก</h3>
         <div class="round-display" id="round-display">รอบที่ 1</div>
 
         <div class="config-group">
@@ -145,18 +162,38 @@
             <input type="checkbox" id="elimination-toggle" onchange="toggleElimination(this.checked)" style="width:20px; height:20px; cursor:pointer;">
         </div>
 
-        <div class="toggle-box">
-            <span>🏷️ เปิดใช้งานทีม (ผู้เล่นตั้งชื่อทีมตอนเข้าร่วมได้)</span>
-            <input type="checkbox" id="team-mode-toggle" onchange="toggleTeamMode(this.checked)" style="width:20px; height:20px; cursor:pointer;">
-        </div>
-        <div class="toggle-box">
-            <span>🏆 แสดง Leaderboard แบบทีม (แทนรายบุคคล)</span>
-            <input type="checkbox" id="team-podium-toggle" onchange="toggleTeamPodium(this.checked)" style="width:20px; height:20px; cursor:pointer;">
-        </div>
-
         <button class="btn-ctrl btn-start" onclick="nextRound()">▶️ จบรอบนี้ บันทึกผล แล้วไปรอบถัดไป</button>
         <button class="btn-ctrl btn-secondary" onclick="toggleHistoryPanel()">📜 ดูประวัติแต่ละรอบ</button>
         <div id="history-panel" style="display:none; margin-top:12px;"></div>
+    </div>
+
+    <!-- ========== โหมดทีม ========== -->
+    <div class="card">
+        <h3>🏷️ โหมดทีม</h3>
+        <div class="toggle-box">
+            <span>เปิดใช้งานโหมดทีม (Leaderboard จะขึ้นแบบจัดอันดับทีมแทนรายบุคคลทันที)</span>
+            <input type="checkbox" id="team-mode-toggle" onchange="toggleTeamMode(this.checked)" style="width:20px; height:20px; cursor:pointer;">
+        </div>
+
+        <div id="team-mode-settings" style="display:none;">
+            <div class="selector-group">
+                <button id="team-rank-average" class="select-btn active" onclick="setTeamRankMethod('AVERAGE')">📊 จัดอันดับด้วยค่าเฉลี่ยทีม</button>
+                <button id="team-rank-fastest" class="select-btn" onclick="setTeamRankMethod('FASTEST')">⚡ จัดอันดับด้วยคนที่เร็วสุดในทีม</button>
+            </div>
+
+            <div class="config-group">
+                <label>จำกัดจำนวนคนต่อทีม (0 = ไม่จำกัด):</label>
+                <input type="number" id="team-capacity-input" value="0" min="0" onchange="setTeamCapacity(this.value)">
+            </div>
+
+            <div class="config-group">
+                <input type="text" id="new-team-name" placeholder="ชื่อทีมใหม่...">
+                <button class="btn-ctrl btn-secondary" style="margin-bottom:0; width:auto;" onclick="createTeam()">➕ สร้างทีม</button>
+            </div>
+
+            <div id="team-list"></div>
+            <p class="caveat">ผู้เล่นจะเลือกทีมได้จากรายการนี้ตอนเข้าร่วมเกม (ถ้าเปิดโหมดทีมไว้ตอนที่พวกเขากดเข้าร่วม) หรือ host กำหนดให้ทีหลังได้จากปุ่ม "🏷️ ทีม" ในตารางผู้เล่นด้านล่าง</p>
+        </div>
     </div>
 
     <!-- ========== สรุปผล + ผู้เล่น ========== -->
@@ -308,7 +345,8 @@
         let totalRounds = 0;
         let eliminationModeEnabled = false;
         let teamModeEnabled = false;
-        let teamPodiumEnabled = false;
+        let teamRankMethod = 'AVERAGE';
+        let teamCapacity = 0;
         let lobbyMusicEnabled = false;
         let lobbyMusicUrl = '';
         let lobbyMusicVolume = 50;
@@ -318,11 +356,14 @@
         let serverOffset = 0;
         let manualUnlockTimer = null;
         let latestPlayers = {};
+        let latestTeams = {};
         let progressAnimFrame = null;
         let lastAction = null;
         let undoTimer = null;
         let winnerBannerShownForRound = false;
         let historyPanelOpen = false;
+        let teamAssignTargetId = null;
+        let teamAssignTargetName = null;
 
         showLoadingOverlay('กำลังเชื่อมต่อ...');
         let firstLoad = true;
@@ -430,7 +471,7 @@
             db.ref('gameState/lightsScale').set(currentLightsScale);
         }
 
-        // === ระบบหลายรอบ / แพ้คัดออก / ทีม ===
+        // === ระบบหลายรอบ / แพ้คัดออก ===
         db.ref('gameState/currentRound').on('value', snap => {
             currentRound = snap.val() || 1;
             renderRoundDisplay();
@@ -455,24 +496,6 @@
         function toggleElimination(enabled) {
             eliminationModeEnabled = enabled;
             db.ref('gameState/eliminationModeEnabled').set(enabled);
-        }
-
-        db.ref('gameState/teamModeEnabled').on('value', snap => {
-            teamModeEnabled = snap.val() === true;
-            document.getElementById('team-mode-toggle').checked = teamModeEnabled;
-            renderPlayerTable();
-        });
-        function toggleTeamMode(enabled) {
-            teamModeEnabled = enabled;
-            db.ref('gameState/teamModeEnabled').set(enabled);
-        }
-        db.ref('gameState/teamPodiumEnabled').on('value', snap => {
-            teamPodiumEnabled = snap.val() === true;
-            document.getElementById('team-podium-toggle').checked = teamPodiumEnabled;
-        });
-        function toggleTeamPodium(enabled) {
-            teamPodiumEnabled = enabled;
-            db.ref('gameState/teamPodiumEnabled').set(enabled);
         }
 
         function nextRound() {
@@ -558,9 +581,119 @@
             const survivors = list.filter(p => !p.eliminated);
             if (survivors.length === 1 && !winnerBannerShownForRound) {
                 winnerBannerShownForRound = true;
-                document.getElementById('winner-name-text').textContent = `${survivors[0].avatar || ''} ${survivors[0].name}`;
-                document.getElementById('winner-banner').classList.add('show');
+                document.getElementById('winner-name-text').textContent = survivors[0].name;
+                document.getElementById('winner-banner').style.display = 'flex';
             }
+        }
+        function closeWinnerBanner() {
+            document.getElementById('winner-banner').style.display = 'none';
+        }
+
+        // === โหมดทีม ===
+        db.ref('gameState/teamModeEnabled').on('value', snap => {
+            teamModeEnabled = snap.val() === true;
+            document.getElementById('team-mode-toggle').checked = teamModeEnabled;
+            document.getElementById('team-mode-settings').style.display = teamModeEnabled ? 'block' : 'none';
+            renderPlayerTable();
+        });
+        function toggleTeamMode(enabled) {
+            teamModeEnabled = enabled;
+            db.ref('gameState/teamModeEnabled').set(enabled);
+        }
+
+        db.ref('gameState/teamRankMethod').on('value', snap => {
+            teamRankMethod = snap.val() || 'AVERAGE';
+            document.getElementById('team-rank-average').className = 'select-btn ' + (teamRankMethod === 'AVERAGE' ? 'active' : '');
+            document.getElementById('team-rank-fastest').className = 'select-btn ' + (teamRankMethod === 'FASTEST' ? 'active' : '');
+        });
+        function setTeamRankMethod(method) {
+            teamRankMethod = method;
+            db.ref('gameState/teamRankMethod').set(method);
+        }
+
+        db.ref('gameState/teamCapacity').on('value', snap => {
+            teamCapacity = snap.val() || 0;
+            document.getElementById('team-capacity-input').value = teamCapacity;
+            renderTeamList();
+        });
+        function setTeamCapacity(val) {
+            teamCapacity = parseInt(val, 10) || 0;
+            db.ref('gameState/teamCapacity').set(teamCapacity);
+        }
+
+        db.ref('teams').on('value', snap => {
+            latestTeams = snap.val() || {};
+            renderTeamList();
+        });
+        function createTeam() {
+            const input = document.getElementById('new-team-name');
+            const name = input.value.trim();
+            if (!name) { showToast('พิมพ์ชื่อทีมก่อน', 'error'); return; }
+            const exists = Object.values(latestTeams).some(t => t.name.toLowerCase() === name.toLowerCase());
+            if (exists) { showToast('มีทีมชื่อนี้อยู่แล้ว', 'error'); return; }
+            const id = 'team_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+            db.ref(`teams/${id}`).set({ name, createdAt: Date.now() + serverOffset })
+                .then(() => { showToast(`สร้างทีม "${name}" แล้ว`, 'success'); input.value = ''; });
+        }
+        function deleteTeam(teamId, name) {
+            if (!confirm(`ลบทีม "${name}"? ผู้เล่นที่อยู่ทีมนี้จะกลายเป็นไม่มีทีม`)) return;
+            Object.entries(latestPlayers).forEach(([id, p]) => {
+                if (p.team === name) db.ref(`players/${id}`).update({ team: null });
+            });
+            db.ref(`teams/${teamId}`).remove();
+            showToast(`ลบทีม "${name}" แล้ว`, 'success');
+        }
+        function renderTeamList() {
+            const wrap = document.getElementById('team-list');
+            wrap.innerHTML = '';
+            Object.entries(latestTeams).forEach(([id, t]) => {
+                const count = Object.values(latestPlayers).filter(p => p.team === t.name).length;
+                const row = document.createElement('div');
+                row.className = 'team-row';
+                const label = document.createElement('span');
+                label.className = 't-name';
+                label.textContent = `🏷️ ${t.name} — ${count}${teamCapacity > 0 ? '/' + teamCapacity : ' คน'}`;
+                const delBtn = document.createElement('button');
+                delBtn.className = 'action-btn btn-kick';
+                delBtn.textContent = '🗑️ ลบทีม';
+                delBtn.onclick = () => deleteTeam(id, t.name);
+                row.appendChild(label); row.appendChild(delBtn);
+                wrap.appendChild(row);
+            });
+        }
+
+        // === โมดัลเลือกทีมให้ผู้เล่น (แทนที่การพิมพ์ชื่อทีมเอง) ===
+        function openTeamAssignModal(playerId, playerName, currentTeam) {
+            teamAssignTargetId = playerId;
+            teamAssignTargetName = playerName;
+            const select = document.getElementById('team-assign-select');
+            select.innerHTML = '<option value="">(ไม่มีทีม)</option>';
+            Object.values(latestTeams).forEach(t => {
+                const count = Object.values(latestPlayers).filter(p => p.team === t.name && p.id !== playerId).length;
+                const opt = document.createElement('option');
+                opt.value = t.name;
+                opt.textContent = t.name + (teamCapacity > 0 ? ` (${count}/${teamCapacity})` : ` (${count} คน)`);
+                if (t.name === currentTeam) opt.selected = true;
+                select.appendChild(opt);
+            });
+            document.getElementById('team-assign-title').textContent = `เลือกทีมให้ "${playerName}"`;
+            document.getElementById('team-assign-modal').style.display = 'flex';
+        }
+        function closeTeamAssignModal() {
+            document.getElementById('team-assign-modal').style.display = 'none';
+        }
+        function confirmTeamAssign() {
+            const chosenTeam = document.getElementById('team-assign-select').value;
+            if (chosenTeam && teamCapacity > 0) {
+                const count = Object.values(latestPlayers).filter(p => p.team === chosenTeam && p.id !== teamAssignTargetId).length;
+                if (count >= teamCapacity) {
+                    showToast(`ทีม "${chosenTeam}" เต็มแล้ว (จำกัด ${teamCapacity} คน)`, 'error');
+                    return;
+                }
+            }
+            db.ref(`players/${teamAssignTargetId}`).update({ team: chosenTeam || null })
+                .then(() => showToast(`ตั้งทีมให้ "${teamAssignTargetName}" แล้ว`, 'success'));
+            closeTeamAssignModal();
         }
 
         // === เพลงลอบบี้ ===
@@ -634,7 +767,8 @@
                 totalRounds: totalRounds,
                 eliminationModeEnabled: eliminationModeEnabled,
                 teamModeEnabled: teamModeEnabled,
-                teamPodiumEnabled: teamPodiumEnabled,
+                teamRankMethod: teamRankMethod,
+                teamCapacity: teamCapacity,
                 lobbyMusicEnabled: lobbyMusicEnabled,
                 lobbyMusicUrl: lobbyMusicUrl,
                 lobbyMusicVolume: lobbyMusicVolume,
@@ -728,8 +862,9 @@
             });
         }
 
+        // รีเซ็ต "รอบปัจจุบัน" แบบเบา — ไม่แตะเลขรอบ ไม่แตะคะแนนสะสม ใช้ตอนอยากลองรอบนี้ใหม่เฉยๆ
         function resetGame() {
-            if (!confirm('ยืนยันรีเซ็ตเกมทั้งหมด? สถานะ/คะแนนของผู้เล่นทุกคนในรอบนี้จะถูกล้าง และกลับไปเริ่มที่รอบ 1 (แต่ประวัติรอบก่อนหน้ายังอยู่)')) return;
+            if (!confirm('ยืนยันรีเซ็ตรอบนี้? สถานะและเวลาของผู้เล่นทุกคนในรอบปัจจุบันจะถูกล้าง (เลขรอบและคะแนนสะสมจะไม่เปลี่ยน)')) return;
 
             if (manualUnlockTimer) clearTimeout(manualUnlockTimer);
             if (progressAnimFrame) cancelAnimationFrame(progressAnimFrame);
@@ -744,29 +879,24 @@
             manualBtn.disabled = true;
 
             const playersBackup = JSON.parse(JSON.stringify(latestPlayers));
-            currentRound = 1;
-            winnerBannerShownForRound = false;
 
             db.ref('gameState').set(Object.assign({
                 state: 'WAITING',
                 mode: currentMode,
                 screenView: currentScreen,
                 resetAt: Date.now() + serverOffset,
-                currentRound: 1
+                currentRound: currentRound
             }, buildFullGameStateSettings()));
 
             db.ref('players').once('value', snapshot => {
                 const players = snapshot.val();
                 for (let key in players) {
-                    db.ref(`players/${key}`).update({
-                        status: 'WAITING', time: 0, eliminated: false,
-                        totalTime: 0, roundsPlayed: 0, bestTimeOverall: null
-                    });
+                    db.ref(`players/${key}`).update({ status: 'WAITING', time: 0 });
                 }
             });
 
             checkControlState();
-            showToast('รีเซ็ตเกมแล้ว กลับไปรอบที่ 1', 'success');
+            showToast('รีเซ็ตรอบนี้แล้ว', 'success');
             setLastAction({ type: 'reset', players: playersBackup, label: '↩️ คืนค่ารอบก่อนหน้า (จากการรีเซ็ต)' });
         }
 
@@ -801,7 +931,7 @@
         // === Keyboard shortcuts ===
         document.addEventListener('keydown', e => {
             const tag = (document.activeElement && document.activeElement.tagName) || '';
-            if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
             if (e.code === 'Space') {
                 e.preventDefault();
@@ -818,6 +948,7 @@
             latestPlayers = snapshot.val() || {};
             renderPlayerTable();
             renderStats();
+            renderTeamList();
             checkWinner();
         });
 
@@ -843,13 +974,13 @@
 
                 const nameTd = document.createElement('td');
                 const nameStrong = document.createElement('strong');
-                nameStrong.textContent = (p.avatar ? p.avatar + ' ' : '') + (p.name || '(ไม่มีชื่อ)');
+                nameStrong.textContent = p.name || '(ไม่มีชื่อ)';
                 nameTd.appendChild(nameStrong);
                 const dot = document.createElement('span');
                 dot.className = 'offline-dot' + (p.connected !== false ? ' online' : '');
                 dot.title = (p.connected !== false) ? 'ออนไลน์' : 'ขาดการเชื่อมต่อ';
                 nameTd.appendChild(dot);
-                if (teamModeEnabled && p.team) {
+                if (p.team) {
                     const teamSmall = document.createElement('div');
                     teamSmall.style.cssText = 'font-size:0.75rem; opacity:0.6;';
                     teamSmall.textContent = `🏷️ ${p.team}`;
@@ -870,7 +1001,7 @@
                 const teamBtn = document.createElement('button');
                 teamBtn.className = 'action-btn btn-team';
                 teamBtn.textContent = '🏷️ ทีม';
-                teamBtn.onclick = () => setPlayerTeam(key, p.team, p.name);
+                teamBtn.onclick = () => openTeamAssignModal(key, p.name, p.team);
                 const msgBtn = document.createElement('button');
                 msgBtn.className = 'action-btn btn-msg';
                 msgBtn.textContent = '💬 ข้อความ';
@@ -925,13 +1056,6 @@
                     .then(() => showToast(`เปลี่ยนชื่อเป็น "${cleanName}" แล้ว`, 'success'))
                     .catch(() => showToast('เปลี่ยนชื่อไม่สำเร็จ กรุณาลองใหม่ (เช็คอินเทอร์เน็ต)', 'error'));
             }
-        }
-
-        function setPlayerTeam(playerId, oldTeam, name) {
-            const newTeam = prompt(`ตั้งชื่อทีมให้ "${name}" (เว้นว่างเพื่อลบทีม):`, oldTeam || '');
-            if (newTeam === null) return;
-            db.ref(`players/${playerId}`).update({ team: newTeam.trim() || null })
-                .then(() => showToast(`ตั้งทีมให้ "${name}" แล้ว`, 'success'));
         }
 
         function kickPlayer(playerId, name) {
