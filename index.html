@@ -11,11 +11,11 @@
 
         .login-card { background: var(--color-panel); padding: 30px; border-radius: var(--radius-lg); border: 1px solid var(--color-border); width: 90%; max-width: 400px; }
         .login-card input[type="text"] { width: 100%; padding: 15px; border-radius: 10px; border: 1px solid #444; background: #222; color: #fff; font-size: 1.1rem; text-align: center; margin-bottom: 15px; }
-        .login-card .team-input { font-size: 0.95rem; padding: 12px; }
+        .login-card select { width: 100%; padding: 14px; border-radius: 10px; border: 1px solid #444; background: #222; color: #fff; font-size: 1rem; margin-bottom: 15px; }
         .login-card button.join-submit { width: 100%; padding: 15px; background: var(--color-success); color: white; border: none; border-radius: 10px; font-size: 1.1rem; font-weight: bold; cursor: pointer; }
         .login-card button:disabled { opacity: 0.5; cursor: not-allowed; }
         .login-best { font-size: 0.9rem; color: var(--color-text-dim); margin-top: 14px; }
-        .picker-label { font-size: 0.85rem; color: var(--color-text-dim); margin-bottom: 8px; text-align: left; }
+        .team-select-label { font-size: 0.85rem; color: var(--color-text-dim); margin-bottom: 8px; text-align: left; }
 
         .game-area { display: none; width: 100vw; height: 100vh; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; transition: background 0.15s; touch-action: manipulation; }
         .game-area.waiting { background: var(--color-panel); }
@@ -75,17 +75,15 @@
 </head>
 <body>
 
-    <!-- หน้ากรอกชื่อ -->
+    <!-- หน้ากรอกชื่อ: มีแค่ชื่อ + (ทีมถ้า host เปิดไว้) + ปุ่มเข้าร่วม -->
     <div id="login-screen" class="login-card">
         <h2 style="margin-bottom: 20px; color: var(--color-primary);">🏎️ เข้าร่วมการแข่งขัน</h2>
         <input type="text" id="player-name-input" placeholder="ใส่ชื่อของคุณ..." maxlength="15">
-        <input type="text" id="team-name-input" class="team-input" placeholder="ชื่อทีม (ถ้ามี ไม่บังคับ)" maxlength="20">
 
-        <div class="picker-label">เลือกตัวละครของคุณ:</div>
-        <div class="picker-row" id="avatar-picker"></div>
-
-        <div class="picker-label">เลือกสีประจำตัว:</div>
-        <div class="picker-row" id="color-picker"></div>
+        <div id="team-select-wrap" style="display:none;">
+            <div class="team-select-label">เลือกทีมของคุณ:</div>
+            <select id="team-select"></select>
+        </div>
 
         <button id="join-btn" class="join-submit" onclick="joinGame()">เข้าร่วมเกม</button>
         <div id="login-best" class="login-best"></div>
@@ -142,8 +140,6 @@
         let joinInProgress = false;
         let lastGameStateForVibration = null;
         let messagesListenStartTime = null;
-        let selectedAvatar = localStorage.getItem('rt_avatar') || AVATAR_OPTIONS[0];
-        let selectedColor = localStorage.getItem('rt_color') || COLOR_OPTIONS[0];
 
         showLoadingOverlay('กำลังเชื่อมต่อ...');
 
@@ -159,32 +155,6 @@
         db.ref('.info/connected').on('value', snap => {
             document.getElementById('conn-warn').style.display = (snap.val() === true) ? 'none' : 'block';
         });
-
-        // === Avatar / สีประจำตัว ===
-        function renderPickers() {
-            const avatarEl = document.getElementById('avatar-picker');
-            avatarEl.innerHTML = '';
-            AVATAR_OPTIONS.forEach(a => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'avatar-option' + (a === selectedAvatar ? ' selected' : '');
-                btn.textContent = a;
-                btn.onclick = () => { selectedAvatar = a; localStorage.setItem('rt_avatar', a); renderPickers(); };
-                avatarEl.appendChild(btn);
-            });
-
-            const colorEl = document.getElementById('color-picker');
-            colorEl.innerHTML = '';
-            COLOR_OPTIONS.forEach(c => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'color-option' + (c === selectedColor ? ' selected' : '');
-                btn.style.background = c;
-                btn.onclick = () => { selectedColor = c; localStorage.setItem('rt_color', c); renderPickers(); };
-                colorEl.appendChild(btn);
-            });
-        }
-        renderPickers();
 
         // === Personal Best (เก็บในเครื่องผู้เล่นเอง) ===
         function getPersonalBest() {
@@ -219,9 +189,65 @@
         window.addEventListener('DOMContentLoaded', () => {
             const savedName = localStorage.getItem('rt_player_name');
             if (savedName) document.getElementById('player-name-input').value = savedName;
-            const savedTeam = localStorage.getItem('rt_team_name');
-            if (savedTeam) document.getElementById('team-name-input').value = savedTeam;
         });
+
+        // === โหมดทีม: ทีมมาจากที่ host สร้างไว้เท่านั้น (ไม่ใช่พิมพ์เอง) ===
+        function initTeamPicker() {
+            db.ref('gameState/teamModeEnabled').once('value', gsSnap => {
+                const enabled = gsSnap.val() === true;
+                const wrap = document.getElementById('team-select-wrap');
+                if (!enabled) { wrap.style.display = 'none'; return; }
+                wrap.style.display = 'block';
+                refreshTeamOptions();
+            });
+        }
+        function refreshTeamOptions() {
+            Promise.all([
+                db.ref('teams').once('value'),
+                db.ref('players').once('value'),
+                db.ref('gameState/teamCapacity').once('value')
+            ]).then(([teamsSnap, playersSnap, capSnap]) => {
+                const teams = teamsSnap.val() || {};
+                const players = playersSnap.val() || {};
+                const capacity = capSnap.val() || 0;
+                const select = document.getElementById('team-select');
+                const prevValue = select.value;
+                select.innerHTML = '<option value="">-- เลือกทีม --</option>';
+                Object.values(teams).forEach(t => {
+                    const count = Object.values(players).filter(p => p.team === t.name).length;
+                    const full = capacity > 0 && count >= capacity;
+                    const opt = document.createElement('option');
+                    opt.value = t.name;
+                    opt.textContent = t.name + (capacity > 0 ? ` (${count}/${capacity}${full ? ' เต็มแล้ว' : ''})` : ` (${count} คน)`);
+                    opt.disabled = full;
+                    select.appendChild(opt);
+                });
+                if (Array.from(select.options).some(o => o.value === prevValue)) select.value = prevValue;
+            });
+        }
+        initTeamPicker();
+
+        function renderTeamLine(team) {
+            const el = document.getElementById('display-team');
+            if (team) {
+                el.style.display = 'block';
+                el.textContent = `🏷️ ทีม ${team}`;
+            } else {
+                el.style.display = 'none';
+            }
+        }
+
+        function renderRoundBadge() {
+            const el = document.getElementById('round-badge-local');
+            const total = gameState.totalRounds || 0;
+            const current = gameState.currentRound || 1;
+            if (current > 1 || total > 0) {
+                el.style.display = 'block';
+                el.textContent = `🏁 รอบที่ ${current}` + (total > 0 ? ` / ${total}` : '');
+            } else {
+                el.style.display = 'none';
+            }
+        }
 
         // === แก้ปัญหา: รีเฟรชหน้าแล้วต้องกรอกชื่อ/กดเข้าร่วมใหม่ ===
         function attemptAutoRejoin() {
@@ -253,28 +279,6 @@
             });
         }
         attemptAutoRejoin();
-
-        function renderTeamLine(team) {
-            const el = document.getElementById('display-team');
-            if (team) {
-                el.style.display = 'block';
-                el.textContent = `🏷️ ทีม ${team}`;
-            } else {
-                el.style.display = 'none';
-            }
-        }
-
-        function renderRoundBadge() {
-            const el = document.getElementById('round-badge-local');
-            const total = gameState.totalRounds || 0;
-            const current = gameState.currentRound || 1;
-            if (current > 1 || total > 0) {
-                el.style.display = 'block';
-                el.textContent = `🏁 รอบที่ ${current}` + (total > 0 ? ` / ${total}` : '');
-            } else {
-                el.style.display = 'none';
-            }
-        }
 
         // === กันหน้าจอดับเอง ระหว่างอยู่ในหน้าเว็บนี้ ===
         let wakeLock = null;
@@ -309,8 +313,8 @@
 
             const input = document.getElementById('player-name-input');
             const name = input.value.trim();
-            const teamInput = document.getElementById('team-name-input');
-            const team = teamInput.value.trim();
+            const teamPickerVisible = document.getElementById('team-select-wrap').style.display !== 'none';
+            const chosenTeam = teamPickerVisible ? document.getElementById('team-select').value : '';
 
             if (!name) {
                 showToast('กรุณากรอกชื่อก่อนเข้าเล่น', 'error');
@@ -353,54 +357,72 @@
                         return;
                     }
 
-                    db.ref('gameState').once('value', gsSnap => {
-                        const gs = gsSnap.val() || {};
-                        const roundInProgress = gs.state === 'STARTING' || gs.state === 'MANUAL_GO';
-                        const initialStatus = roundInProgress ? 'LOCKED' : 'WAITING';
+                    function afterTeamCheckPassed() {
+                        db.ref('gameState').once('value', gsSnap => {
+                            const gs = gsSnap.val() || {};
+                            const roundInProgress = gs.state === 'STARTING' || gs.state === 'MANUAL_GO';
+                            const initialStatus = roundInProgress ? 'LOCKED' : 'WAITING';
 
-                        myName = name;
-                        localStorage.setItem('rt_player_name', name);
-                        if (team) localStorage.setItem('rt_team_name', team);
-                        document.getElementById('display-name').innerText = myName;
-                        renderTeamLine(team);
+                            myName = name;
+                            localStorage.setItem('rt_player_name', name);
+                            document.getElementById('display-name').innerText = myName;
+                            renderTeamLine(chosenTeam || null);
 
-                        db.ref(`players/${myPlayerId}`).set({
-                            id: myPlayerId,
-                            name: myName,
-                            status: initialStatus,
-                            time: 0,
-                            joinedAt: now,
-                            connected: true,
-                            avatar: selectedAvatar,
-                            color: selectedColor,
-                            team: team || null,
-                            totalTime: 0,
-                            roundsPlayed: 0,
-                            bestTimeOverall: null,
-                            eliminated: false
-                        }).then(() => {
-                            isJoined = true;
-                            myStatus = initialStatus;
-                            gameState = gs;
-                            refreshDisconnectHook();
-                            requestWakeLock();
+                            db.ref(`players/${myPlayerId}`).set({
+                                id: myPlayerId,
+                                name: myName,
+                                status: initialStatus,
+                                time: 0,
+                                joinedAt: now,
+                                connected: true,
+                                team: chosenTeam || null,
+                                totalTime: 0,
+                                roundsPlayed: 0,
+                                bestTimeOverall: null,
+                                eliminated: false
+                            }).then(() => {
+                                isJoined = true;
+                                myStatus = initialStatus;
+                                gameState = gs;
+                                refreshDisconnectHook();
+                                requestWakeLock();
 
-                            document.getElementById('login-screen').style.display = 'none';
-                            document.getElementById('game-screen').style.display = 'flex';
-                            listenToGame();
-                            listenToSelf();
-                            listenToAllPlayers();
-                            listenToMessages();
+                                document.getElementById('login-screen').style.display = 'none';
+                                document.getElementById('game-screen').style.display = 'flex';
+                                listenToGame();
+                                listenToSelf();
+                                listenToAllPlayers();
+                                listenToMessages();
 
-                            if (roundInProgress) {
-                                showToast('รอบนี้เริ่มไปแล้ว กรุณารอรอบถัดไปนะ', 'info', 4000);
-                            }
-                        }).catch(() => {
-                            showToast('เข้าร่วมเกมไม่สำเร็จ กรุณาลองใหม่ (เช็คอินเทอร์เน็ต)', 'error');
-                            joinInProgress = false;
-                            document.getElementById('join-btn').disabled = false;
+                                if (roundInProgress) {
+                                    showToast('รอบนี้เริ่มไปแล้ว กรุณารอรอบถัดไปนะ', 'info', 4000);
+                                }
+                            }).catch(() => {
+                                showToast('เข้าร่วมเกมไม่สำเร็จ กรุณาลองใหม่ (เช็คอินเทอร์เน็ต)', 'error');
+                                joinInProgress = false;
+                                document.getElementById('join-btn').disabled = false;
+                            });
                         });
-                    });
+                    }
+
+                    if (chosenTeam) {
+                        db.ref('gameState/teamCapacity').once('value', capSnap => {
+                            const capacity = capSnap.val() || 0;
+                            if (capacity > 0) {
+                                const count = Object.values(players).filter(p => p.team === chosenTeam).length;
+                                if (count >= capacity) {
+                                    showToast(`ทีม "${chosenTeam}" เต็มแล้ว กรุณาเลือกทีมอื่น`, 'error');
+                                    joinInProgress = false;
+                                    document.getElementById('join-btn').disabled = false;
+                                    refreshTeamOptions();
+                                    return;
+                                }
+                            }
+                            afterTeamCheckPassed();
+                        });
+                    } else {
+                        afterTeamCheckPassed();
+                    }
                 });
             });
         }
@@ -605,7 +627,6 @@
 
                 tryVibrate(isNewBest ? [40, 40, 40] : 40, gameState.vibrationEnabled);
 
-                // สถิติสะสมข้ามรอบ (อิงข้อมูลล่าสุดที่ Firebase ส่งมาให้ผ่าน allPlayers)
                 const mine = allPlayers[myPlayerId] || {};
                 const prevTotal = mine.totalTime || 0;
                 const prevRounds = mine.roundsPlayed || 0;
@@ -638,7 +659,7 @@
         document.addEventListener('keydown', function (e) {
             if (e.code !== 'Space' && e.key !== ' ') return;
             const active = document.activeElement;
-            if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+            if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) return;
             e.preventDefault();
             if (e.repeat) return;
 
