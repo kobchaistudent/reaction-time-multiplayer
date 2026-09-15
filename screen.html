@@ -55,7 +55,7 @@
     <div class="player-count-badge" id="player-count-badge">👥 ผู้เล่น: 0 คน</div>
     <button class="fullscreen-btn" onclick="toggleFullscreen()" title="เต็มจอ">⛶</button>
 
-    <div id="winner-banner" class="winner-banner">
+    <div id="winner-banner" class="winner-banner" style="display:none;">
         <div class="trophy">🏆</div>
         <div class="winner-name" id="winner-name-text"></div>
         <div class="winner-sub">ผู้ชนะการแข่งขันแบบแพ้คัดออก!</div>
@@ -107,7 +107,8 @@
         let playersLoaded = false;
         let pendingLeaderboardReveal = false;
         let currentPodiumMode = 'ANIMATED';
-        let teamPodiumEnabled = false;
+        let teamModeEnabled = false;
+        let teamRankMethod = 'AVERAGE';
         let eliminationModeEnabled = false;
         let winnerBannerShownForRound = false;
         let lastRoundSeen = 1;
@@ -162,7 +163,7 @@
             }
         }
 
-        // === แบนเนอร์ผู้ชนะ (โหมดแพ้คัดออก) ===
+        // === แบนเนอร์ผู้ชนะ (โหมดแพ้คัดออก) — สลับด้วย style.display ตรงๆ กันเคส CSS ภายนอกโหลดไม่ทัน/พลาด ===
         function checkWinnerBanner() {
             if (!eliminationModeEnabled) return;
             const list = Object.values(latestPlayers);
@@ -170,8 +171,8 @@
             const survivors = list.filter(p => !p.eliminated);
             if (survivors.length === 1 && !winnerBannerShownForRound) {
                 winnerBannerShownForRound = true;
-                document.getElementById('winner-name-text').textContent = `${survivors[0].avatar || ''} ${survivors[0].name}`;
-                document.getElementById('winner-banner').classList.add('show');
+                document.getElementById('winner-name-text').textContent = survivors[0].name;
+                document.getElementById('winner-banner').style.display = 'flex';
                 fireConfettiSafe();
             }
         }
@@ -185,7 +186,7 @@
             // ไฟ 5 ดวง
             if (data.state === 'WAITING') {
                 sequencer.resetLights();
-                document.getElementById('winner-banner').classList.remove('show');
+                document.getElementById('winner-banner').style.display = 'none';
             } else {
                 sequencer.run(data);
             }
@@ -210,8 +211,9 @@
             updateLobbyMusicState(data);
 
             eliminationModeEnabled = data.eliminationModeEnabled === true;
-            teamPodiumEnabled = data.teamPodiumEnabled === true;
-            document.getElementById('board-title-text').textContent = teamPodiumEnabled ? '🏆 LEADERBOARD (ทีม)' : '🏆 LEADERBOARD';
+            teamModeEnabled = data.teamModeEnabled === true;
+            teamRankMethod = data.teamRankMethod || 'AVERAGE';
+            document.getElementById('board-title-text').textContent = teamModeEnabled ? '🏆 LEADERBOARD (ทีม)' : '🏆 LEADERBOARD';
 
             // สลับหน้าจอหลัก
             const viewMode = data.screenView || 'LIGHTS';
@@ -235,15 +237,15 @@
         });
 
         function revealLeaderboardNow() {
-            if (teamPodiumEnabled) {
-                leaderboardController.revealTeams(latestPlayers, currentPodiumMode);
+            if (teamModeEnabled) {
+                leaderboardController.revealTeams(latestPlayers, currentPodiumMode, teamRankMethod);
             } else {
                 leaderboardController.reveal(latestPlayers, currentPodiumMode);
             }
         }
         function refreshLeaderboardNow() {
-            if (teamPodiumEnabled) {
-                leaderboardController.refreshTeamTableOnly(latestPlayers);
+            if (teamModeEnabled) {
+                leaderboardController.refreshTeamTableOnly(latestPlayers, teamRankMethod);
             } else {
                 leaderboardController.refreshTableOnly(latestPlayers);
             }
