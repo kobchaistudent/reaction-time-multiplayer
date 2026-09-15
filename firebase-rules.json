@@ -23,7 +23,8 @@
       "practiceModeEnabled": { ".validate": "newData.isBoolean()" },
       "eliminationModeEnabled": { ".validate": "newData.isBoolean()" },
       "teamModeEnabled": { ".validate": "newData.isBoolean()" },
-      "teamPodiumEnabled": { ".validate": "newData.isBoolean()" },
+      "teamRankMethod": { ".validate": "newData.isString() && newData.val().matches(/^(AVERAGE|FASTEST)$/)" },
+      "teamCapacity": { ".validate": "newData.isNumber() && newData.val() >= 0" },
       "lobbyMusicEnabled": { ".validate": "newData.isBoolean()" },
       "podiumMode": { ".validate": "newData.isString() && newData.val().matches(/^(ANIMATED|INSTANT)$/)" },
       "$other": { ".validate": false }
@@ -36,8 +37,6 @@
         "id": { ".validate": "newData.isString()" },
         "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 15" },
         "team": { ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 20)" },
-        "avatar": { ".validate": "newData.isString() && newData.val().length <= 4" },
-        "color": { ".validate": "newData.isString() && newData.val().matches(/^#[0-9a-fA-F]{6}$/)" },
         "status": { ".validate": "newData.isString() && newData.val().matches(/^(WAITING|STARTING|MANUAL_GO|OK|JUMP_START|LOCKED|PRACTICE|ELIMINATED)$/)" },
         "time": { ".validate": "newData.isNumber() && newData.val() >= 0" },
         "totalTime": { ".validate": "newData.isNumber() && newData.val() >= 0" },
@@ -76,6 +75,16 @@
         "round": { ".validate": "newData.isNumber()" },
         "timestamp": { ".validate": "newData.isNumber()" },
         "players": true
+      }
+    },
+
+    "teams": {
+      "$teamId": {
+        ".write": true,
+        ".validate": "newData.hasChildren(['name'])",
+        "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 20" },
+        "createdAt": { ".validate": "newData.isNumber()" },
+        "$other": { ".validate": false }
       }
     }
   }
